@@ -46,10 +46,15 @@ Run test_spark.py -> python3.10 test_spark.py
 Spark version: 3.5.6
 
 +---+------+
+
 | id| fruit|
+
 +---+------+
+
 |  1| apple|
+
 |  2|banana|
+
 +---+------+
 
 
