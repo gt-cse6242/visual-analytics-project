@@ -1,0 +1,17 @@
+
+# Ignore the dataset folder
+yelp_dataset/
+
+# Ignore system files
+.DS_Store
+**/.DS_Store/
+
+# Virtual environments
+venv/
+env/
+.venv/
+.env/
+ENV/
+env.bak/
+venv.bak/
+cse6242/
