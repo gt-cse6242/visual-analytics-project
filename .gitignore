@@ -3,6 +3,7 @@
 yelp_dataset/
 parquet/
 
+
 # Ignore system files
 .DS_Store
 **/.DS_Store/
