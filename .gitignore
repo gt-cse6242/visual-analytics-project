@@ -1,6 +1,8 @@
 
 # Ignore the dataset folder
 yelp_dataset/
+parquet/
+
 
 # Ignore system files
 .DS_Store
