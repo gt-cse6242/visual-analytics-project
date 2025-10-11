@@ -1,3 +1,11 @@
+"""
+Minimal Spark smoke test. Creates a tiny DataFrame and shows it.
+
+Usage:
+    python test_spark.py
+Expected:
+    Prints Spark version and a 2-row table.
+"""
 from pyspark.sql import SparkSession
 
 spark = (
