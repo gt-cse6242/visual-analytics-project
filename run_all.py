@@ -17,6 +17,8 @@ Notes:
 """
 import argparse
 import time
+import sys
+import subprocess
 
 # Step modules
 from jobs import yelp_review as reviews_step
@@ -82,6 +84,10 @@ def main():
     parser.add_argument("--skip-join", action="store_true", help="Skip joining business onto reviews")
     parser.add_argument("--years", nargs="*", type=int, default=None, help="Optional list of years to read/show")
     parser.add_argument("--sample", type=int, default=10, help="Number of sample rows to display")
+    # Wordcloud options
+    parser.add_argument("--make-wordcloud", action="store_true", help="Generate a wordcloud (or bar chart fallback) from review text")
+    parser.add_argument("--wordcloud-output", default="out/review_wordcloud.png", help="Output PNG path for the wordcloud/bar chart")
+    parser.add_argument("--wordcloud-top", type=int, default=200, help="Number of words to include in the wordcloud/bar chart")
     args = parser.parse_args()
 
     if not args.skip_review:
@@ -98,6 +104,26 @@ def main():
 
     print("\n=== Step 3/3: Read enriched Parquet and sample ===")
     read_and_sample(years=args.years, sample_rows=args.sample)
+
+    # Optional Step 4: Generate wordcloud using a separate module invocation to avoid CLI arg conflicts
+    if args.make_wordcloud:
+        print("\n=== Step 4: Generate wordcloud from reviews text ===")
+        cmd = [
+            sys.executable,
+            "-m",
+            "enriched.make_review_wordcloud",
+            "--reviews", "parquet/yelp_review_enriched",  # use enriched output from this run
+            "--output", args.wordcloud_output,
+            "--top", str(args.wordcloud_top),
+            "--no-generate",  # avoid regeneration since pipeline already ran
+        ]
+        if args.years:
+            cmd.extend(["--years", *[str(y) for y in args.years]])
+        print("Running:", " ".join(cmd))
+        try:
+            subprocess.run(cmd, check=True)
+        except subprocess.CalledProcessError as e:
+            print("Wordcloud generation failed:", e)
 
 
 if __name__ == "__main__":

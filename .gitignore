@@ -22,7 +22,7 @@ cse6242/
 # Ignore everything in .vscode except settings.json so teammates get the right Python env hints
 .vscode/*
 !.vscode/settings.json
-enriched/out/review_wordcloud.png
+review_wordcloud.png
 
 # Python cache
 __pycache__/
