@@ -17,3 +17,14 @@ ENV/
 env.bak/
 venv.bak/
 cse6242/
+
+# Editor settings
+# Ignore everything in .vscode except settings.json so teammates get the right Python env hints
+.vscode/*
+!.vscode/settings.json
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
