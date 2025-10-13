@@ -150,3 +150,7 @@ Download and import the dataset from https://business.yelp.com/data/resources/op
 ```
 yelp_dataset/ 
 ```
+
+### ???. Figma Doc
+Proposed Game Plan
+https://www.figma.com/board/QpCfwYfbgEIpWHs54CPg0f/Proposed-Game-Plan-Flow-Chart?node-id=0-1&t=HUS5YNJthlFw0eho-1
