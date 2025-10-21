@@ -1,5 +1,7 @@
 
 # Ignore the dataset folder
+# ignore notebooks outputs
+review_wordcloud.png
 yelp_dataset/
 parquet/
 
@@ -22,7 +24,7 @@ cse6242/
 # Ignore everything in .vscode except settings.json so teammates get the right Python env hints
 .vscode/*
 !.vscode/settings.json
-review_wordcloud.png
+
 
 # Python cache
 __pycache__/
