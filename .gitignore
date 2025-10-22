@@ -4,6 +4,7 @@
 review_wordcloud.png
 yelp_dataset/
 parquet/
+checkpoints/
 
 # Ignore the dataset folder within algorithm-prototype folder
 algorithm-prototype/checkpoints/
