@@ -16,7 +16,7 @@ import sys
 # ------------ NLP HELPER FUNCTIONS ------------
 _NLP = {"obj": None}  # mutable container for SpaCy model
 
-def _get_nlp(spacy_model: str = "en_core_web_sm"):
+def get_nlp(spacy_model: str = "en_core_web_sm"):
     """
     Lazy-loads and returns a SpaCy NLP model.
     
@@ -27,14 +27,13 @@ def _get_nlp(spacy_model: str = "en_core_web_sm"):
         spacy.lang: Loaded SpaCy model with sentencizer pipe enabled.
     """
     if _NLP["obj"] is None:
-        import spacy
         nlp = spacy.load(spacy_model, disable=["ner"])
         if "sentencizer" not in nlp.pipe_names:
             nlp.add_pipe("sentencizer", first=True)
         _NLP["obj"] = nlp
     return _NLP["obj"]
 
-def _normalize_aspect(tok) -> str:
+def normalize_aspect(tok) -> str:
     """
     Normalizes an aspect token by including its compound modifiers.
     
@@ -54,66 +53,9 @@ def _normalize_aspect(tok) -> str:
             parts.append(right.text)
     return " ".join(parts).lower()
 
-def _extract_pairs_from_sentence(sent):
+def lemmas(aspect: str):
     """
-    Extracts aspect-opinion pairs from a sentence using dependency parsing.
-    
-    This function implements three strategies to find aspect-opinion pairs:
-    1. Adjectival modifiers of nouns (e.g., "great food")
-    2. Copular constructions with adjective complements (e.g., "service was excellent")
-    3. Verbs with noun arguments and adjectival modifiers
-    
-    Args:
-        sent (spacy.tokens.Span): A SpaCy sentence span to analyze
-        
-    Returns:
-        list: List of dictionaries containing aspect-opinion pairs
-    """
-    pairs = []
-
-    # 1) NOUN <-amod- ADJ
-    for tok in sent:
-        if tok.pos_ == "NOUN":
-            for child in tok.children:
-                if child.dep_ == "amod" and child.pos_ == "ADJ":
-                    pairs.append((tok, child))
-
-    # 2) acomp with nsubj/nsubjpass: "service was great"
-    for tok in sent:
-        if tok.dep_ == "acomp" and tok.pos_ == "ADJ":
-            head = tok.head
-            for child in head.children:
-                if child.dep_ in ("nsubj", "nsubjpass") and child.pos_ in {"NOUN","PROPN"}:
-                    pairs.append((child, tok))
-
-    # 3) VERB with NOUN arg and nearby ADJ child
-    for tok in sent:
-        if tok.pos_ == "VERB":
-            noun_dependents = [c for c in tok.children if c.pos_ in {"NOUN","PROPN"} and c.dep_ in ("dobj","nsubj","nsubjpass","pobj")]
-            adj_children = [c for c in tok.children if c.pos_ == "ADJ"]
-            for n in noun_dependents:
-                for a in adj_children:
-                    pairs.append((n, a))
-
-    out = []
-    seen = set()
-    for a_tok, o_tok in pairs:
-        a = _normalize_aspect(a_tok)
-        if not a:
-            continue
-        o = o_tok.lemma_.lower()
-        key = (a, o, a_tok.i, o_tok.i)
-        if key in seen:
-            continue
-        seen.add(key)
-        out.append({"aspect": a, "opinion": o})
-    return out
-
-def _lemmas(aspect: str):
-    """
-    Performs basic lemmatization of aspect terms using rule-based approach.
-    
-    Handles common plural forms and basic morphological variants.
+    Reduce the words to their root forms
     
     Args:
         aspect (str): The aspect term to lemmatize
@@ -131,7 +73,67 @@ def _lemmas(aspect: str):
         else: lem.append(t)
     return lem
 
-def _route_category(aspect: str, seeds: Dict, targets: List[str]) -> Optional[str]:
+def extract_pairs_from_sentence(sent):
+    """
+    Extracts aspect-opinion pairs from a sentence using dependency parsing.
+    
+    This function implements three strategies to find aspect-opinion pairs:
+    1. Adjectival modifiers of nouns (e.g., "great food")
+    2. Copular constructions with adjective complements (e.g., "service was excellent")
+    3. Verbs with noun arguments and adjectival modifiers
+    
+    Args:
+        sent (spacy.tokens.Span): A SpaCy sentence span to analyze
+        
+    Returns:
+        list: List of dictionaries containing aspect-opinion pairs
+    """
+    pairs = []
+
+    # Iterate through tokens in the sentence
+    # Adjectival modifier (amod) -> noun: e.g. "great" food
+    for tok in sent:
+        if tok.pos_ == "NOUN":
+            for child in tok.children:
+                if child.dep_ == "amod" and child.pos_ == "ADJ":
+                    pairs.append((tok, child))
+
+    # 2) adjective compliment (acomp) with nominal subject (nsubj/nsubjpass): The food is "great"
+    for tok in sent:
+        if tok.dep_ == "acomp" and tok.pos_ == "ADJ":
+            head = tok.head
+            for child in head.children:
+                if child.dep_ in ("nsubj", "nsubjpass") and child.pos_ in {"NOUN","PROPN"}:
+                    pairs.append((child, tok))
+
+    # 3) VERB with NOUN arg and nearby ADJ child: "love the spicy food"
+    for tok in sent:
+        if tok.pos_ == "VERB":
+            noun_dependents = [c for c in tok.children if c.pos_ in {"NOUN","PROPN"} and c.dep_ in ("dobj","nsubj","nsubjpass","pobj")]
+            adj_children = [c for c in tok.children if c.pos_ == "ADJ"]
+            for n in noun_dependents:
+                for a in adj_children:
+                    pairs.append((n, a))
+
+
+    # normalize the tokens and remove duplicates
+    out = []
+    aspect_opinion_pair = set()
+    for a_tok, o_tok in pairs:
+        a = normalize_aspect(a_tok)
+        if not a:
+            continue
+        o = o_tok.lemma_.lower()
+        key = (a, o, a_tok.i, o_tok.i)
+        if key in aspect_opinion_pair:
+            continue
+        aspect_opinion_pair.add(key)
+        out.append({"aspect": a, "opinion": o})
+    return out
+
+
+
+def route_category(aspect: str, seeds: Dict, targets: List[str]) -> Optional[str]:
     """
     Categorizes an aspect into predefined restaurant-related categories.
     
@@ -146,7 +148,7 @@ def _route_category(aspect: str, seeds: Dict, targets: List[str]) -> Optional[st
     Returns:
         Optional[str]: Category name if matched, None if no match
     """
-    lem = _lemmas(aspect)
+    lem = lemmas(aspect)
     for cat, vocab in seeds.items():
         if any(t in vocab for t in lem):
             return cat if cat in targets else None
@@ -175,22 +177,32 @@ def process_partition(rows: Iterable[Row], text_col: str, meta_cols: List[str],
     Returns:
         Iterable[Row]: Iterator of processed rows with extracted aspects
     """
-    nlp = _get_nlp(spacy_model)
+    nlp = get_nlp(spacy_model)
     for r in rows:
         text = r[text_col]
         if not isinstance(text, str) or not text.strip():
             continue
         doc = nlp(text)
+        # process each sentence
         for sent in doc.sents:
-            pairs = _extract_pairs_from_sentence(sent)
+            # Remove stop words
+            original_text = sent.text.strip()
+
+            filtered_text = [token.text for token in sent if not token.is_stop and not token.is_punct]
+
+            # extract the filtered text into a new spacy doc
+            filtered_text = " ".join(filtered_text)
+            sent = nlp(filtered_text)[:]
+
+            pairs = extract_pairs_from_sentence(sent)
             if not pairs:
                 continue
             for p in pairs:
-                cat = _route_category(p["aspect"], seeds, targets)
+                cat = route_category(p["aspect"], seeds, targets)
                 if cat is None:
                     continue
                 yield Row(
-                    sentence=sent.text,
+                    sentence=original_text,
                     aspect=p["aspect"],
                     opinion=p["opinion"],
                     category=cat,
@@ -229,6 +241,8 @@ def extract_aspect_from_text(
         Optional[pyspark.sql.DataFrame]: If out_path is None, returns DataFrame with extracted aspects.
         Otherwise writes to Parquet and returns None.
     """
+
+    # ========= set up the pyspark session =========
     spark = (
         SparkSession.builder
         .appName("ABSA-PySpark")
@@ -258,11 +272,12 @@ def extract_aspect_from_text(
         .getOrCreate()
 )
 
+    # ========= load the enriched data =========
     meta_cols = meta_cols or []
 
-    # Load input
     df = spark.read.parquet(input_path)
    
+    # Keep only needed columns
     keep = [text_col] + meta_cols
     df = df.select(*keep)
 
@@ -271,42 +286,45 @@ def extract_aspect_from_text(
                 .filter(col("biz_categories").like("%restaurants"))
     print(f"Full business review count: {df.count()}")
     print(f"Restaurant business review count: {df_restaurant.count()}")
-    data_size = 100000
+
+    # ========= For testing, limit data size =========
+    data_size = 1000
     df = df_restaurant.limit(data_size)
 
+    # =========  For full data, use =========
+    # df = df_restaurant
     # df.show()
 
+    # ========= process the data to extract aspects =========
     # Use the process_partition function with the dataframe
     rdd = df.rdd.mapPartitions(
         lambda rows: process_partition(rows, text_col, meta_cols or [], seeds, aspects, spacy_model)
     )
 
+    # convert RDD back to DataFrame and save results in a pyspark dataframe
     schema_fields = [
         StructField("sentence", StringType(), True),
+        StructField("aspect_seeds", StringType(), True),
+        StructField("aspect_opinion", StringType(), True),
         StructField("aspect", StringType(), True),
-        StructField("opinion", StringType(), True),
-        StructField("category", StringType(), True),
     ] + [StructField(c, StringType(), True) for c in meta_cols]
     schema = StructType(schema_fields)
 
     result_df = spark.createDataFrame(rdd, schema=schema)
-
     result_df.show()
 
+    # ========= Repartition if needed =========
     if repartition_n:
         result_df = result_df.repartition(repartition_n)
     
 
-    if out_path:
-        
-        result_df.write.mode("overwrite").parquet(out_path)
-        print(f"[info] wrote Parquet → {out_path}")
-        result_df.toPandas().to_csv(f'{out_path}/restaurant_reviews_with_aspect_extracted.csv')
-        spark.stop()
-        return None
-    else:
-        # Let caller keep working with the DF (e.g., in a notebook)
-        return result_df
+    # ========= output the results =========
+    result_df.write.mode("overwrite").parquet(f"{out_path}_{data_size if str(data_size) else ''}")
+    print(f"[info] wrote Parquet → {out_path}_{data_size if str(data_size) else ''}")
+    result_df.toPandas().to_csv(f"{out_path}_{data_size if str(data_size) else ''}/restaurant_reviews_with_aspect_extracted.csv")
+    spark.stop()
+
+    return 
 
 
 
@@ -318,11 +336,11 @@ if __name__ == "__main__":
     INPUT_PATH = ENRICHED_PARQUET
     TEXT_COL   = "text"
     META_COLS  = ["business_id","biz_name","stars","date","biz_categories"]   # put your columns here (or [])
-    OUT_PATH   = f"parquet/absa_restaurant_parquet_{100000}"  # or set to None to return DF
+    OUT_PATH   = f"parquet/absa_restaurant_parquet"  # or set to None to return DF
     SPACY_MODEL = "en_core_web_sm"
     REPARTITION = 1
 
-        # Seeds & targets
+    # Map word Seeds to their target aspect categories
     RESTAURANT_SEEDS = {
         "food": {
             "food","dish","course","meal","taste","flavor","flavour","spice","seasoning","freshness",
@@ -346,8 +364,11 @@ if __name__ == "__main__":
             "portion-for-price","deal","discount","happy hour","fees","surcharge"
         },
     }
+
+    # target aspects to extract
     ASPECTS = {"food","service","environment","price"}
 
+    # run the extraction
     extract_aspect_from_text(
         input_path=INPUT_PATH,
         text_col=TEXT_COL,
