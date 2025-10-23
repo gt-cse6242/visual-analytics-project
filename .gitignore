@@ -4,6 +4,7 @@
 review_wordcloud.png
 yelp_dataset/
 parquet/
+<<<<<<< HEAD
 
 # Ignore the dataset folder within algorithm-prototype folder
 algorithm-prototype/checkpoints/
@@ -12,6 +13,10 @@ algorithm-prototype/checkpoints.json
 algorithm-prototype/parquet
 algorithm-prototype/.venv
 algorithm-prototype/Aspect*
+=======
+checkpoints/
+checkpoints.json
+>>>>>>> 97de752 (ignore files)
 *.state_dict
 *.pt
 *.pth
