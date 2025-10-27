@@ -164,34 +164,34 @@ class AspectMapper:
 
 
 ############################################
-# 4. Demo
+# Demo
 ############################################
 
-if __name__ == "__main__":
+# if __name__ == "__main__":
 
-    with open("input_ontology.json", "r") as f:
-        ONTLOLOGY = json.load(f)
+#     with open("input_ontology.json", "r") as f:
+#         ONTLOLOGY = json.load(f)
 
-    ontology = build_comprehensive_ontology(ONTLOLOGY)
+#     ontology = build_comprehensive_ontology(ONTLOLOGY)
 
-    # Create mapper
-    mapper = AspectMapper(ontology)
+#     # Create mapper
+#     mapper = AspectMapper(ontology)
 
-    # Example phrases from rule-based extraction
-    test_phrases = [
-        "the check took forever",
-        "bathroom was disgusting",
-        "the steak was cold",
-        "music was too loud, had to shout",
-        "portion size was tiny for the price",
-        "our server was super rude",
-        "great value for money",
-        "the patio view was gorgeous",
-        "felt way too expensive for what we got",
-    ]
+#     # Example phrases from rule-based extraction
+#     test_phrases = [
+#         "the check took forever",
+#         "bathroom was disgusting",
+#         "the steak was cold",
+#         "music was too loud, had to shout",
+#         "portion size was tiny for the price",
+#         "our server was super rude",
+#         "great value for money",
+#         "the patio view was gorgeous",
+#         "felt way too expensive for what we got",
+#     ]
 
-    for p in test_phrases:
-        result = mapper.map_phrase(p)
-        print("\nPhrase:", p)
-        for k, v in result.items():
-            print(f"  {k}: {v}")
+#     for p in test_phrases:
+#         result = mapper.map_phrase(p)
+#         print("\nPhrase:", p)
+#         for k, v in result.items():
+#             print(f"  {k}: {v}")
