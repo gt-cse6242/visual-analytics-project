@@ -1,0 +1,147 @@
+
+{
+    "food": {
+    "category_synonyms": [
+        "food", "dish", "meal", "plate", "course", "menu item", "kitchen"
+    ],
+    "sub_aspects": {
+        "taste / flavor": [
+            "taste", "flavor", "flavour", "seasoning", "spice", "well seasoned",
+            "bland", "no flavor", "underseasoned", "overseasoned", "too salty",
+            "too sweet", "too spicy", "sauce was amazing", "sauce was bland"
+        ],
+        "freshness / quality": [
+            "freshness", "fresh", "not fresh", "stale", "old", "soggy",
+            "ingredients tasted fresh", "quality of ingredients", "frozen taste"
+        ],
+        "temperature": [
+            "temperature", "served cold", "served lukewarm", "piping hot",
+            "food came out cold", "food wasn't hot", "steak was cold",
+            "soup was cold"
+        ],
+        "portion size": [
+            "portion", "portion size", "serving size", "huge portion",
+            "tiny portion", "small plate", "portion-for-price", "leftovers"
+        ],
+        "presentation / plating": [
+            "presentation", "plating", "looked beautiful", "looked sloppy",
+            "aesthetic", "instagram worthy", "garnish was nice"
+        ],
+        "dietary options": [
+            "vegan", "vegetarian", "gluten-free", "gf options", "dairy free",
+            "allergy friendly", "substitutions", "accommodated my allergy"
+        ],
+        "specific item quality": [
+            "burger", "steak", "pasta", "sushi", "pizza", "salad", "soup",
+            "dessert", "entree", "appetizer", "cocktail", "wine", "beer",
+            "coffee", "latte", "tea", "drinks were amazing", "drinks were weak"
+        ]
+    }
+    },
+
+    "service": {
+        "category_synonyms": [
+            "service", "server", "waiter", "waitress", "staff", "waitstaff",
+            "host", "hostess", "bartender", "manager", "front of house", "foh"
+        ],
+        "sub_aspects": {
+            "speed / timeliness": [
+                "timing", "speed", "fast service", "slow service", "took forever",
+                "waited forever", "rushed us", "they rushed us", "we were ignored",
+                "check took forever", "refill took forever", "took a long time to order",
+                "took a long time to get the check", "took a long time to get seated"
+            ],
+            "attentiveness": [
+                "attentive", "checked on us", "never checked on us", "ignored us",
+                "they kept refilling", "no refills", "kept asking if we were okay",
+                "didn't come back", "left us alone the whole time"
+            ],
+            "friendliness / attitude": [
+                "friendly", "nice", "warm", "welcoming", "inviting",
+                "rude", "attitude", "snobby", "unprofessional",
+                "they rolled their eyes", "she had an attitude",
+                "manager was rude", "hostess was rude", "bartender was rude"
+            ],
+            "knowledge / competence": [
+                "knowledge of the menu", "knew the menu", "explained the menu",
+                "explained specials", "got our order wrong", "messed up our order",
+                "fixed the mistake", "never fixed the mistake",
+                "professional", "unprofessional"
+            ],
+            "seating / greeting experience": [
+                "check-in", "checkin", "host stand", "host ignored us",
+                "no one at the host stand", "they seated us quickly",
+                "we waited to be seated", "reservation honored",
+                "reservation not honored"
+            ],
+            "payment / closing experience": [
+                "the check took forever", "took forever to pay", "took my card",
+                "never brought the bill", "bill came fast", "asked about tip",
+                "pressure to tip", "tipping pressure", "automatic gratuity"
+            ]
+        }
+    },
+
+    "environment": {
+        "category_synonyms": [
+            "environment", "ambience", "ambiance", "atmosphere", "vibe", "decor",
+            "setting", "space", "room", "dining room", "interior", "aesthetic"
+        ],
+        "sub_aspects": {
+            "noise / music / volume": [
+                "music", "loud music", "music was too loud", "too loud",
+                "noise", "noisy", "quiet", "peaceful", "couldn't hear",
+                "had to shout", "karaoke night", "live music", "dj"
+            ],
+            "cleanliness / hygiene": [
+                "cleanliness", "clean", "dirty", "gross", "disgusting",
+                "sticky table", "sticky floor", "bathroom was disgusting",
+                "bathroom was clean", "restroom was nasty",
+                "mold smell", "smelled bad"
+            ],
+            "space / crowding / comfort": [
+                "crowded", "packed", "too many people", "cramped",
+                "tables too close", "spacious", "roomy", "lots of space",
+                "comfortable seating", "uncomfortable seating",
+                "hard chairs", "booth was comfy", "tiny table"
+            ],
+            "visual aesthetics / decor": [
+                "decor", "cute decor", "cozy vibe", "romantic vibe", "lighting",
+                "mood lighting", "too dark", "too bright", "instagrammable",
+                "patio", "view", "nice patio", "rooftop", "outdoor seating"
+            ],
+            "environmental conditions": [
+                "temperature", "too hot", "too cold", "AC", "air", "drafty",
+                "smell", "odor", "weird smell", "cigarette smell", "smelled like grease",
+                "parking", "no parking", "parking was easy"
+            ]
+        }
+    },
+
+    "price": {
+        "category_synonyms": [
+            "price", "cost", "value", "expensive", "cheap", "overpriced",
+            "affordable", "pricy", "pricey", "wallet friendly",
+            "worth it", "not worth it"
+        ],
+        "sub_aspects": {
+            "value for money": [
+                "value for money", "worth the price", "worth it", "not worth it",
+                "good deal", "great deal", "overpriced", "rip-off", "too expensive",
+                "super pricey", "cheap", "affordable", "felt fair", "reasonable"
+            ],
+            "portion size vs price": [
+                "portion-for-price", "portion for price", "small portions for the price",
+                "tiny for how much it cost", "huge portions for the price",
+                "a lot of food for the money"
+            ],
+            "bill / fees / charges": [
+                "bill", "check", "the check", "they charged us extra",
+                "mystery fee", "hidden fee", "automatic gratuity",
+                "service charge", "surcharge", "added fees",
+                "tip", "tipping", "tip pressure", "tip was included",
+                "happy hour", "discount", "deal", "special", "promo"
+            ]
+        }
+    }
+}

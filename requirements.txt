@@ -6,3 +6,4 @@ pyarrow>=10,<20
 # Visualization for wordcloud/bar chart
 wordcloud>=1.9,<2.0
 matplotlib>=3.7,<4.0
+sentence-transformers
