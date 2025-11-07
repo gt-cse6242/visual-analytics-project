@@ -1,0 +1,256 @@
+import sys
+from pyspark.sql import SparkSession
+from pyspark.sql import functions as F
+from pyspark.sql.types import *
+from nltk.stem import PorterStemmer
+from nltk.tokenize import word_tokenize
+
+import nltk
+nltk.download('punkt_tab')
+# --------------------------------------------------------
+# Start Spark Session
+# --------------------------------------------------------
+spark = (
+    SparkSession.builder
+    .appName("AspectTermBucketing-CharGram")
+    # make sure executors use your venv python
+    .config("spark.sql.shuffle.partitions", "4")
+    .config("spark.pyspark.python", sys.executable)
+    .config("spark.pyspark.driver.python", sys.executable)
+
+    # give driver/executor a bit more heap
+    .config("spark.driver.memory", "6g")
+    .config("spark.executor.memory", "6g")
+    .config("spark.driver.maxResultSize", "6g") 
+
+    # read smaller file splits to reduce per-task memory
+    .config("spark.sql.files.maxPartitionBytes", str(64 * 1024 * 1024))  # 64 MB (default 128 MB)
+    .config("spark.sql.files.openCostInBytes", str(8 * 1024 * 1024))     # helps create more splits
+
+    # Parquet reader: smaller vectorized batches (or disable if needed)
+    .config("spark.sql.parquet.enableVectorizedReader", "true")
+    .config("spark.sql.parquet.columnarReaderBatchSize", "1024")          # default ~4096; lower uses less heap
+    # If still OOM, try disabling vectorization:
+    # .config("spark.sql.parquet.enableVectorizedReader", "false")
+
+    # make Python workers reusable (fewer forks)
+    .config("spark.python.worker.reuse", "true")
+
+    # fewer rows per shuffle task (helps local dev)
+    .config("spark.sql.shuffle.partitions", "100")
+    .getOrCreate()
+)
+
+spark.sparkContext.setLogLevel("ERROR")
+
+# --------------------------------------------------------
+# read in the data
+# --------------------------------------------------------
+input_path = "parquet/yelp_review_restaurant_with_extracted_aspects"  # sample from hayley_yelp_absa_extract_aspects_spaCy_v2.py output
+print(f"\n========== input from {input_path}) ==============================")
+df = spark.read.parquet(input_path)
+df.printSchema()
+print(f"Total rows in input DF: {df.count()}")
+df = df.dropDuplicates()
+print(f"Total rows in input DF after duplicates are dropped: {df.count()}")
+
+# df.limit(10000).toPandas().to_csv("absa_restaurant_sample_with_extracted_aspects_with_both_methods.csv", index=False)
+
+
+
+# --- 1) Your dictionaries (short sample here; replace with your full dicts) ---
+positive_terms = {
+    "general": [
+        "best", "better", "good", "great", "excellent", "exceptional", "amazing",
+        "awesome", "fantastic", "pleasant", "wonderful", "love", "liked", "worth",
+        "outstanding", "impressive", "superb", "favorable", "satisfying",
+        "delightful", "perfect", "marvelous", "terrific", "positive", "admirable",
+        "incredible", "enjoyable", "remarkable", "phenomenal", "nice", "brilliant",
+        "top-notch", "flawless", "commendable", "superior", "stellar", "greatest",
+        "five-star", "recommended", "highly rated"
+    ],
+
+    "service": [
+        "friendly", "nice", "cheerful", "attentive", "helpful", "professional",
+        "courteous", "prompt", "efficient", "welcoming", "polite", "responsive",
+        "patient", "understanding", "kind", "knowledgeable", "accommodating",
+        "respectful", "well-trained", "informative", "caring", "quick", "on time",
+        "fast", "organized", "supportive", "thorough", "considerate", "trustworthy",
+        "proactive", "exceptional service", "first-class", "amazing staff",
+        "dedicated", "hardworking", "positive attitude", "teamwork", "helpful staff"
+    ],
+
+    "food": [
+        "delicious", "tasty", "flavorful", "fresh", "authentic", "savory", "yummy",
+        "well-seasoned", "appetizing", "outstanding", "crispy", "tender", "juicy",
+        "succulent", "perfectly cooked", "mouthwatering", "rich", "balanced",
+        "fragrant", "aromatic", "exquisite", "hearty", "delectable", "satisfying",
+        "generous portion", "well-presented", "flawless taste", "homemade", "creative",
+        "gourmet", "top quality", "well-prepared", "fresh ingredients", "spot on","barely edible"
+    ],
+
+    "ambience": [
+        "cozy", "comfortable", "relaxing", "beautiful", "inviting", "charming",
+        "romantic", "clean", "modern", "spacious", "stylish", "elegant", "vibrant",
+        "quiet", "peaceful", "pleasant", "bright", "classy", "attractive", "welcoming",
+        "warm", "neat", "ambient", "aesthetic", "lovely decor", "great atmosphere",
+        "instagrammable", "well-lit", "unique vibe", "comfortable seating",
+        "nicely designed", "spotless", "tidy", "hygienic", "sanitized", "well-maintained",
+        "fresh-smelling", "organized", "pristine"
+    ],
+
+    "price": [
+        "reasonable", "affordable", "valuable", "fair", "budget-friendly",
+        "inexpensive", "cost-effective", "worth the money", "great deal",
+        "good value", "cheap", "fairly priced", "excellent value", "not expensive",
+        "wallet-friendly", "economic", "competitive", "deal", "discounted",
+        "bang for buck"
+    ]
+}
+
+
+negative_terms = {
+    "general": [
+        "worse", "worst", "bad", "terrible", "awful", "poor", "disappointing",
+        "unpleasant", "horrible", "mediocre", "unsatisfactory", "lacking",
+        "worthless", "pathetic", "frustrating", "annoying", "hated", "boring",
+        "unacceptable", "dreadful", "inferior", "horrid", "atrocious", "subpar",
+        "defective", "messy", "inadequate", "not good", "underwhelming", "horrendous",
+        "fail", "waste", "letdown", "unimpressive", "awful experience", "ok"
+    ],
+
+    "service": [
+        "rude", "unhelpful", "slow", "inattentive", "unprofessional", "disorganized",
+        "neglectful", "impolite", "arrogant", "unresponsive", "careless", "lazy",
+        "unavailable", "untrained", "incompetent", "ignorant", "disrespectful",
+        "clueless", "apathetic", "dismissive", "hostile", "snobby", "late", "absent",
+        "condescending", "snobbish", "irritable", "unfriendly", "unmotivated"
+    ],
+
+    "food": [
+        "bland", "cold", "greasy", "stale", "overcooked", "undercooked", "tasteless",
+        "spoiled", "soggy", "burnt", "salty", "dry", "flavorless", "gross",
+        "inedible", "disgusting", "oily", "hard", "rubbery", "stinky", "bitter",
+        "poor quality", "unfresh", "rotten", "unseasoned", "poorly cooked",
+        "small portion", "weird texture","too much", "too little", "lacking flavor",
+        "lukewarm", "unappetizing", "unpalatable", "nasty", "chewy", "fatty"
+    ],
+
+    "ambience": [
+        "noisy", "crowded", "dirty", "uncomfortable", "dark", "cramped", "stuffy",
+        "smelly", "dingy", "old-fashioned", "boring", "awkward", "chaotic",
+        "messy", "poorly lit", "gloomy", "loud", "uninviting", "run-down",
+        "dated", "stifling", "cluttered", "filthy", "unsanitary", "sticky",
+        "gross", "grimy", "dusty", "stained", "unhygienic", "unmaintained",
+        "disgusting", "nasty"
+    ],
+
+    "price": [
+        "expensive", "overpriced", "costly", "unreasonable", "rip-off", "not worth",
+        "poor value", "pricey", "too high", "waste of money", "excessive",
+        "outrageous", "ridiculous price", "high-priced", "inflated", "unfair cost"
+    ]
+}
+
+# == helper function =========================
+
+# Initialize NLTK stemmer
+stemmer = PorterStemmer()
+
+# Define a Python function for stemming
+def stem_text(text):
+    if text is None:
+        return None
+    tokens = word_tokenize(text)
+    stemmed_tokens = [stemmer.stem(word) for word in tokens]
+    return " ".join(stemmed_tokens)
+
+# Register the Python function as a PySpark UDF
+stem_udf = F.udf(stem_text, StringType())
+
+
+lex_rows = []
+for asp, terms in positive_terms.items():
+    for t in terms:
+        lex_rows.append((asp.lower(), t.lower(), "positive"))
+for asp, terms in negative_terms.items():
+    for t in terms:
+        lex_rows.append((asp.lower(), t.lower(), "negative"))
+
+df_polarity_mapping = spark.createDataFrame(lex_rows, ["aspect_to_match", "term_to_match", "polarity"])
+
+# duplicates all “general” terms (like “good”, “bad”, “amazing”) 
+# into an additional version where the aspect column is set to NULL.
+# This allows matching these terms regardless of aspect.
+# for example: 
+#  --------------------------------------
+# | aspect  | aspect opinion	| token |
+# |---------|-------------------|-------|
+# | service | good and friendly | good  |
+#  --------------------------------------
+# if "good" doesn’t exist under "service" in the lexicon,
+# it will still match the row where aspect IS "NULL"
+# "NULL" aspect acts as wildcard for general
+# The Result is that the sentiment for “service” is still labeled positive.
+
+df_polarity_mapping = df_polarity_mapping.unionByName(
+    df_polarity_mapping.filter(F.col("aspect_to_match") == "general")
+              .withColumn("aspect_to_match", F.lit(None).cast("string"))
+).withColumn("term_to_match", stem_udf(F.lower(F.col("term_to_match"))))
+
+
+# convert aspect_opinion to lower + stemmed
+df_tokenized = (df.withColumn("aspect", F.lower(F.col("aspect")))
+  # remmove punctuation except hyphens
+  .withColumn("aspect_opinion", F.regexp_replace(F.col("aspect_opinion"), r"[^a-z0-9\s\-]", " "))
+  .withColumn("aspect_opinion", stem_udf(F.lower(F.col("aspect_opinion"))))
+  )
+
+
+# Join on (aspect, token) OR backoff (null aspect acts as wildcard for general)
+df_joined = df_tokenized.join(df_polarity_mapping,
+                      ( (df_tokenized.aspect == df_polarity_mapping.aspect_to_match) | df_polarity_mapping.aspect_to_match.isNull() )
+                      & (df_tokenized.aspect_opinion.contains(df_polarity_mapping.term_to_match)),
+                      "left")
+
+# Apply negation logic based on aspect_negated column
+df_joined = df_joined.withColumn(
+    "polarity_with_negate",
+    F.when((F.col("aspect_negated")) & (F.col("polarity") == "positive"), "negative")
+     .when((F.col("aspect_negated")) & (F.col("polarity") == "negative"), "positive")
+     .otherwise(F.col("polarity"))
+).drop("polarity").withColumnRenamed("polarity_with_negate", "polarity")
+
+
+# group by all original columns to collect polarity hits
+df_grouped = df_joined.groupBy(df.columns).agg(F.collect_set("polarity").alias("polarity_hits"))
+df_grouped = df_grouped.withColumn("sentiment",
+      F.when(F.array_contains("polarity_hits", "positive") & ~F.array_contains("polarity_hits", "negative") , "positive")
+       .when(F.array_contains("polarity_hits", "negative") & ~F.array_contains("polarity_hits", "positive"), "negative")
+       .when(F.size("polarity_hits") == 0, "neutral")
+       .otherwise("mixed")
+  ).drop("hits")
+
+
+
+# group by biz_name to get overall aspect scores
+df_result = df_grouped.groupBy("biz_name","aspect").agg(
+    F.sum(F.when(F.col("sentiment") == "positive", 1).otherwise(0)).alias("positive_aspect_count"),
+    F.sum(F.when(F.col("sentiment") == "negative", 1).otherwise(0)).alias("negative_aspect_count")
+).withColumn(
+    "positive_aspect_ratio",
+    F.when(
+        (F.col("positive_aspect_count") + F.col("negative_aspect_count")) == 0,
+        F.lit(None).cast("double")
+    ).otherwise(
+        F.col("positive_aspect_count") / (F.col("positive_aspect_count") + F.col("negative_aspect_count"))
+    )
+)
+
+# extract the
+
+# df_final = (df.select("sentence","review_id","business_id","stars","user_id","biz_name","biz_categories")
+#  .join(df_result, on="biz_name", how="left"))
+
+df_result.toPandas().to_csv("5-aspect_sentiment_results.csv", index=False)
+

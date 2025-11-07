@@ -1,10 +1,6 @@
-# Step modules
-from jobs import yelp_review as reviews_step
-from enriched import join_reviews_with_business as join_step
-
-
 import argparse
 from typing import Iterable, Dict, List, Optional
+from matplotlib import text
 from pyspark.sql import SparkSession
 from pyspark.sql.types import *
 from pyspark.sql.functions import col, lower
@@ -218,33 +214,10 @@ def extract_pairs_from_sentence(sent):
             seen.add(key)
     return uniq
 
-def route_aspect(aspect: str, seeds: Dict, targets: List[str]) -> Optional[str]:
-    """
-    Categorizes an aspect_seeds into predefined restaurant-related aspects. This function is used in function 'process_partition'
-    
-    Uses seed vocabularies to match aspects_seeds to aspects like 'food',
-    'service', 'environment', or 'price'.
-    
-    Args:
-        aspect (str): a review's aspects_seeds term mapped to aspects
-        seeds (Dict): Dictionary of aspects and their seed words
-        targets (List[str]): List of valid target aspects
-        
-    Returns:
-        Optional[str]: aspect name if matched, None if no match
-    """
-    lem = lemmas(aspect)
-    for cat, vocab in seeds.items():
-        if any(t in vocab for t in lem):
-            return cat if cat in targets else None
-    a = " ".join(lem)
-    for cat, vocab in seeds.items():
-        if any((" " in v and v in a) for v in vocab):
-            return cat if cat in targets else None
-    return None
-
-def process_partition(rows: Iterable[Row], text_col: str, meta_cols: List[str], 
-                     seeds: Dict, targets: List[str], spacy_model: str) -> Iterable[Row]:
+def process_partition(rows: Iterable[Row], 
+                        text_col: str, 
+                        meta_cols: List[str], 
+                        spacy_model: str) -> Iterable[Row]: 
     """
     Processes a partition of rows to extract aspect-based sentiment.
     
@@ -273,195 +246,130 @@ def process_partition(rows: Iterable[Row], text_col: str, meta_cols: List[str],
             # save the orignal text
             original_text = sent.text.strip()
 
-            # # Remove stop words and punctuation
-            # filtered_text = [token.text for token in sent if not token.is_stop and not token.is_punct]
-
-            # # extract the filtered text into a new spacy doc
-            # filtered_text = " ".join(filtered_text)
-            # sent = nlp(filtered_text)[:]
-
             pairs = extract_pairs_from_sentence(sent)
             if not pairs:
                 continue
             for p in pairs:
-                aspect = route_aspect(p["aspect"], seeds, targets)
-                if aspect is None:
-                    continue
+                # Process the text with spaCy
+                aspect_seeds = nlp(p["aspect"])
+
+                # Remove stop words
+                filtered_tokens = [token for token in aspect_seeds if not token.is_stop]
+
+                # Reconstruct the text without stop words
+                filtered_text = " ".join([token.text for token in filtered_tokens])
+
                 yield Row(
                     sentence=original_text,
-                    aspect_seed=p["aspect"],
+                    aspect_seed=filtered_text,
                     aspect_opinion=p["opinion"],
                     aspect_negated=p["negated"],
-                    aspect=aspect,
                     **{c: r[c] for c in meta_cols} if meta_cols else {}
                 )
 
-def extract_aspect_from_text(
-    input_path: str,
-    text_col: str,
-    meta_cols: Optional[List[str]] = None,   # e.g., ["business_id","stars","date"]
-    out_path: Optional[str] = None,          # if None, returns a DataFrame instead of writing
-    seeds = Dict,
-    aspects = List[str],
-    spacy_model: str = "en_core_web_sm",
-    repartition_n: Optional[int] = 1
-):
-    """
-    Extracts aspects from text data using SpaCy and PySpark.
-    
-    This function processes text data to identify aspects and their associated opinions,
-    
-    Args:
-        input_path (str): Path to input data file Parquet format
-        text_col (str, optional): Name of the column containing review text.
-        meta_cols (List[str], optional): Additional columns to keep in output. Defaults to None.
-        out_path (str, optional): Path to save output Parquet file. If None, returns DataFrame.
-        seeds (Dict): Dictionary of aspect  and their associated seed words.
-        aspects (List[str]): List of target aspects to extract.
-        spacy_model (str, optional): Name of SpaCy model to use. Defaults to "en_core_web_sm".
-        repartition_n (int, optional): Number of partitions for output. Defaults to 1.
-    
-    Returns:
-        Optional[pyspark.sql.DataFrame]: If out_path is None, returns DataFrame with extracted aspects.
-        Otherwise writes to Parquet and returns None.
-    """
 
-    # ========= set up the pyspark session =========
-    spark = (
-        SparkSession.builder
-        .appName("ABSA-PySpark")
-        # make sure executors use your venv python
-        .config("spark.pyspark.python", sys.executable)
-        .config("spark.pyspark.driver.python", sys.executable)
+# ========= set up the pyspark session =========
+spark = (
+    SparkSession.builder
+    .appName("ABSA-PySpark")
+    # make sure executors use your venv python
+    .config("spark.pyspark.python", sys.executable)
+    .config("spark.pyspark.driver.python", sys.executable)
 
-        # give driver/executor a bit more heap
-        .config("spark.driver.memory", "6g")
-        .config("spark.executor.memory", "6g")
+    # give driver/executor a bit more heap
+    .config("spark.driver.memory", "6g")
+    .config("spark.executor.memory", "6g")
 
-        # read smaller file splits to reduce per-task memory
-        .config("spark.sql.files.maxPartitionBytes", str(64 * 1024 * 1024))  # 64 MB (default 128 MB)
-        .config("spark.sql.files.openCostInBytes", str(8 * 1024 * 1024))     # helps create more splits
+    # read smaller file splits to reduce per-task memory
+    .config("spark.sql.files.maxPartitionBytes", str(64 * 1024 * 1024))  # 64 MB (default 128 MB)
+    .config("spark.sql.files.openCostInBytes", str(8 * 1024 * 1024))     # helps create more splits
 
-        # Parquet reader: smaller vectorized batches (or disable if needed)
-        .config("spark.sql.parquet.enableVectorizedReader", "true")
-        .config("spark.sql.parquet.columnarReaderBatchSize", "1024")          # default ~4096; lower uses less heap
-        # If still OOM, try disabling vectorization:
-        # .config("spark.sql.parquet.enableVectorizedReader", "false")
+    # Parquet reader: smaller vectorized batches (or disable if needed)
+    .config("spark.sql.parquet.enableVectorizedReader", "true")
+    .config("spark.sql.parquet.columnarReaderBatchSize", "4096")          # default ~4096; lower uses less heap
+    # If still OOM, try disabling vectorization:
+    # .config("spark.sql.parquet.enableVectorizedReader", "false")
 
-        # make Python workers reusable (fewer forks)
-        .config("spark.python.worker.reuse", "true")
+    # make Python workers reusable (fewer forks)
+    .config("spark.python.worker.reuse", "true")
 
-        # fewer rows per shuffle task (helps local dev)
-        .config("spark.sql.shuffle.partitions", "100")
-        .getOrCreate()
+    # fewer rows per shuffle task (helps local dev)
+    .config("spark.sql.shuffle.partitions", "100")
+    .getOrCreate()
 )
 
-    # ========= load the enriched data =========
-    meta_cols = meta_cols or []
-
-    df = spark.read.parquet(input_path)
-   
-    # Keep only needed columns
-    keep = [text_col] + meta_cols
-    df = df.select(*keep)
-
-    # ========= filter the data to just restaurants =========
-    df_restaurant = df.withColumn("biz_categories", lower(df["biz_categories"]))\
-                .filter(col("biz_categories").like("%restaurants"))
-    print(f"Full business review count: {df.count()}")
-    print(f"Restaurant business review count: {df_restaurant.count()}")
-
-    # ========= For testing, limit data size =========
-    data_size = 10000
-    df = df_restaurant.limit(data_size)
-
-    # =========  For full data, use =========
-    # df = df_restaurant
-    # df.show()
-
-    # ========= process the data to extract aspects =========
-    # Use the process_partition function with the dataframe
-    rdd = df.rdd.mapPartitions(
-        lambda rows: process_partition(rows, text_col, meta_cols or [], seeds, aspects, spacy_model)
-    )
-
-    # convert RDD back to DataFrame and save results in a pyspark dataframe
-    schema_fields = [
-        StructField("sentence", StringType(), True),
-        StructField("aspect_seed", StringType(), True),
-        StructField("aspect_opinion", StringType(), True),
-        StructField("aspect_negated", StringType(), True),
-        StructField("aspect", StringType(), True),
-    ] + [StructField(c, StringType(), True) for c in meta_cols]
-    schema = StructType(schema_fields)
-
-    result_df = spark.createDataFrame(rdd, schema=schema)
-    result_df.show()
-
-    # ========= Repartition if needed =========
-    if repartition_n:
-        result_df = result_df.repartition(repartition_n)
-    
-
-    # ========= output the results =========
-    result_df.write.mode("overwrite").parquet(f"{out_path}_{data_size if str(data_size) else ''}")
-    print(f"[info] wrote Parquet → {out_path}_{data_size if str(data_size) else ''}")
-    result_df.toPandas().to_csv(f"{out_path}_{data_size if str(data_size) else ''}/restaurant_reviews_with_aspect_extracted.csv")
-    spark.stop()
-
-    return 
 
 
-# ------------ MAIN FUNCTION ------------
-if __name__ == "__main__":
 
-    ENRICHED_PARQUET = "parquet/yelp_review_enriched"
+input_path = "parquet/yelp_review_restaurant"
+text_col   = "text"
+meta_cols  = ["review_id","business_id","stars","user_id","biz_name","biz_categories"] 
+spacy_model = "en_core_web_sm"
+repartition_n = 1
 
-    # Edit these if you want to run this file directly (no argparse)
-    INPUT_PATH = ENRICHED_PARQUET
-    TEXT_COL   = "text"
-    META_COLS  = ["business_id","biz_name","stars","date","biz_categories"]   # put your columns here (or [])
-    OUT_PATH   = f"parquet/absa_restaurant_parquet"  # or set to None to return DF
-    SPACY_MODEL = "en_core_web_sm"
-    REPARTITION = 1
+print(f"\n========== Loading input from {input_path}) ===========")
+df = spark.read.parquet(input_path)
+print(f"[info] read Parquet ← {input_path} with {df.count()} rows")
+df.printSchema()
 
-    # Map word Seeds to their target aspect 
-    RESTAURANT_SEEDS = {
-        "food": {
-            "food","dish","course","meal","taste","flavor","flavour","spice","seasoning","freshness",
-            "portion","serving","menu","appetizer","entree","dessert","pasta","sushi","burger","pizza",
-            "steak","noodle","soup","salad","bread","coffee","tea","drink","beverage","wine","cocktail",
-            "temperature","texture","presentation","sauce","vegan","vegetarian","gluten-free"
-        },
-        "service": {
-            "service","server","waiter","waitress","staff","waitstaff","host","hostess","bartender",
-            "manager","attitude","attentive","responsive","rude","friendly","professional",
-            "checkin","refill","timing","speed","slow","rush","tip","tipping"
-        },
-        "environment": {
-            "environment","ambience","ambiance","atmosphere","vibe","decor","music","noise","noisy",
-            "quiet","lighting","seating","table","booth","patio","view","crowded","space","spacious",
-            "cleanliness","clean","dirty","restroom","bathroom","parking","temperature","ac","air",
-            "smell","odor"
-        },
-        "price": {
-            "price","cost","value","expensive","cheap","overpriced","affordable","bill","check",
-            "portion-for-price","deal","discount","happy hour","fees","surcharge"
-        },
-    }
+# Keep only needed columns
+keep = [text_col] + meta_cols
+df = df.select(*keep)
 
-    # target aspects to extract
-    ASPECTS = {"food","service","environment","price"}
+# ========= filter the data to just restaurants =========
+# df_restaurant = df.withColumn("categories", lower(df["categories"]))\
+#             .filter(col("categories").like("%restaurants"))
+# print(f"Full business review count: {df.count()}")
+# print(f"Restaurant business review count: {df_restaurant.count()}")
 
-    # run the extraction
-    extract_aspect_from_text(
-        input_path=INPUT_PATH,
-        text_col=TEXT_COL,
-        meta_cols=META_COLS,
-        out_path=OUT_PATH,
-        seeds = RESTAURANT_SEEDS,
-        aspects = ASPECTS,
-        spacy_model=SPACY_MODEL,
-        repartition_n=REPARTITION
-    )
+# ========= For testing, limit data size =========
+# data_size = 10000
+# df = df.limit(data_size)
+
+
+"""
+Aspect seed lexicon for domain-specific Aspect-Based Sentiment Analysis (ABSA).
+Each top-level key is a target aspect (food, service, amb, price),
+and each value is a Python set of seed lemmas commonly found in Yelp-style reviews.
+"""
+
+
+print("\n========== process the data to extract aspects =================================")
+# Use the process_partition function with the dataframe
+rdd = df.rdd.mapPartitions(
+    lambda rows: process_partition(rows, 
+                                    text_col, 
+                                    meta_cols or [], 
+                                    spacy_model)
+)
+
+# convert RDD back to DataFrame and save results in a pyspark dataframe
+schema_fields = [
+    StructField("sentence", StringType(), True),
+    StructField("aspect_seed", StringType(), True),
+    StructField("aspect_opinion", StringType(), True),
+    StructField("aspect_negated", StringType(), True)
+] + [StructField(c, StringType(), True) for c in meta_cols]
+schema = StructType(schema_fields)
+
+# run the final conversion
+result_df = spark.createDataFrame(rdd, schema=schema)
+# result_df.show()
+
+# result_df = result_df.limit(10000)
+
+print(f"I'm here")
+
+# # ========= Repartition if needed =========
+# if repartition_n:
+#     result_df = result_df.repartition(repartition_n)
+
+out_path   = f"parquet/yelp_review_restaurant_with_aspect_seeds_extracted" 
+print(f"\n========== Save to {out_path} ==========")
+result_df.write.mode("overwrite").parquet(f"{out_path}")
+print(f"[info] wrote Parquet → {out_path}")
+# result_df.limit(20000).toPandas().to_csv(f"{out_path}_{data_size if str(data_size) else ''}/../restaurant_reviews_with_aspect_extracted.csv")
+
+spark.stop()
+
 
