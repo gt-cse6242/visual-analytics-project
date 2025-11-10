@@ -1,6 +1,18 @@
-# ===========================================
-# Aspect Mapping via Char-gram TF-IDF (Hybrid BM25-ish) on Driver + Spark Join
-# ===========================================
+'''
+========= description ========================
+input_path : parquet/yelp_review_restaurant
+out_path   : parquet/yelp_review_restaurant_with_aspect_seeds_extracted
+
+Map the aspect seeds to pre-defined aspect: food, service, ambience, and price
+1. Apply term frequency and inverse document frequency weighing scheme
+to characters in the aspect seeds and build a unique term list from the review
+2. use TfidfVectorizer to fit on both unique terms and pre-defined aspect prototypes (dictionary). 
+3. use cosine similarity to compare the unique terms to aspects prototypes. 
+4. fine-tune threshold to find the best mapping mechanism. 
+5. Back up: Use lexicon-based mapping for the aspect seeds that was not mapped successfully to a pre-defined aspect.
+==============================================
+'''
+
 from pyspark.sql import SparkSession, functions as F, types as T
 from pyspark.sql import Row
 from typing import Iterable, Dict, List, Optional

@@ -1,3 +1,14 @@
+'''
+========= description ========================
+input_path : parquet/yelp_review_enriched
+out_path   : parquet/yelp_review_restaurant
+
+This script loads Yelp review data from input_path
+filters the reviews to include only those for restaurants
+saves the filtered data to out_path
+==============================================
+'''
+
 from pyspark.sql import SparkSession
 from pyspark.sql.types import *
 from pyspark.sql.functions import col, lower

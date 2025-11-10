@@ -1,12 +1,28 @@
+'''
+========= description ========================
+input_path : parquet/yelp_review_restaurant_with_extracted_aspects
+out_path   : parquet/yelp_review_restaurant_with_extracted_aspects_review_level_scoring
+
+Score the reviews based on aspect opinion
+==============================================
+'''
+
 import sys
 from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
 from pyspark.sql.types import *
 from nltk.stem import PorterStemmer
 from nltk.tokenize import word_tokenize
+import time
 
 import nltk
 nltk.download('punkt_tab')
+
+# --------------------------------------------------------
+# Start Timer
+# --------------------------------------------------------
+t0 = time.time()
+
 # --------------------------------------------------------
 # Start Spark Session
 # --------------------------------------------------------
@@ -169,6 +185,8 @@ def stem_text(text):
 stem_udf = F.udf(stem_text, StringType())
 
 
+print(f"\n========== Score the aspects based on the positive and negative terms in each aspect opinion extracted ==========")
+
 lex_rows = []
 for asp, terms in positive_terms.items():
     for t in terms:
@@ -234,7 +252,14 @@ df_grouped = df_grouped.withColumn("sentiment",
 
 
 # group by biz_name to get overall aspect scores
-df_result = df_grouped.groupBy("biz_name","aspect").agg(
+df_result = df_grouped.groupBy("review_id",
+                               "sentence", 
+                               "user_id",
+                               "business_id",
+                               "biz_name",
+                               "biz_categories",
+                               "stars",
+                               "aspect").agg(
     F.sum(F.when(F.col("sentiment") == "positive", 1).otherwise(0)).alias("positive_aspect_count"),
     F.sum(F.when(F.col("sentiment") == "negative", 1).otherwise(0)).alias("negative_aspect_count")
 ).withColumn(
@@ -245,12 +270,17 @@ df_result = df_grouped.groupBy("biz_name","aspect").agg(
     ).otherwise(
         F.col("positive_aspect_count") / (F.col("positive_aspect_count") + F.col("negative_aspect_count"))
     )
-)
+).filter(F.col("positive_aspect_ratio").isNotNull())
 
-# extract the
 
-# df_final = (df.select("sentence","review_id","business_id","stars","user_id","biz_name","biz_categories")
-#  .join(df_result, on="biz_name", how="left"))
+out_path = "parquet/yelp_review_restaurant_review_level_scoring"
+print(f"\n========== Save to {out_path} ==========")
+df_result.write.mode("overwrite").parquet(out_path)
 
-df_result.toPandas().to_csv("5-aspect_sentiment_results.csv", index=False)
+# df_result.toPandas().to_csv("5-aspect_sentiment_results.csv", index=False)
+
+spark.stop()
+
+print(f"✅ Done in {time.time()-t0:.2f}s")
+
 

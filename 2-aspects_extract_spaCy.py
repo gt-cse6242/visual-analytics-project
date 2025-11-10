@@ -1,4 +1,12 @@
-import argparse
+'''
+========= description ========================
+input_path : parquet/yelp_review_restaurant
+out_path   : parquet/yelp_review_restaurant_with_aspect_seeds_extracted
+
+Use spaCy to extract aspect seeds and aspect opinion from each sentence.
+==============================================
+'''
+
 from typing import Iterable, Dict, List, Optional
 from matplotlib import text
 from pyspark.sql import SparkSession
@@ -315,12 +323,6 @@ df.printSchema()
 # Keep only needed columns
 keep = [text_col] + meta_cols
 df = df.select(*keep)
-
-# ========= filter the data to just restaurants =========
-# df_restaurant = df.withColumn("categories", lower(df["categories"]))\
-#             .filter(col("categories").like("%restaurants"))
-# print(f"Full business review count: {df.count()}")
-# print(f"Restaurant business review count: {df_restaurant.count()}")
 
 # ========= For testing, limit data size =========
 # data_size = 10000
