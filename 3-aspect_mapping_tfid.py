@@ -3,13 +3,15 @@
 input_path : parquet/yelp_review_restaurant
 out_path   : parquet/yelp_review_restaurant_with_aspect_seeds_extracted
 
-Map the aspect seeds to pre-defined aspect: food, service, ambience, and price
-1. Apply term frequency and inverse document frequency weighing scheme
-to characters in the aspect seeds and build a unique term list from the review
-2. use TfidfVectorizer to fit on both unique terms and pre-defined aspect prototypes (dictionary). 
-3. use cosine similarity to compare the unique terms to aspects prototypes. 
-4. fine-tune threshold to find the best mapping mechanism. 
-5. Back up: Use lexicon-based mapping for the aspect seeds that was not mapped successfully to a pre-defined aspect.
+Map the aspect seeds to pre-defined aspect categories: food, service, ambience, and price 
+via char-gram TF-IDF + Cosine Similarity + lexicon-based mapping as a back up. 
+
+1. Extract unique terms from the aspect_seeds column in the input dataframe
+2. Use TfidfVectorizer (char_wb) function from sklearn and apply term frequency and inverse document frequency to 
+both aspect_seeds and the MAPPINGS (pre-defined aspect categories dictionary)
+4. Use cosine similarity to compare the unique terms to MAPPINGS (pre-defined aspect categories dictionary). 
+5. Fine-tune threshold to find the best mapping mechanism. 
+6. Back up: Use lexicon-based mapping for the aspect seeds that was not mapped successfully to a pre-defined aspect.
 ==============================================
 '''
 
@@ -213,52 +215,56 @@ df = spark.read.parquet(input_path)
 df.printSchema()
 print(f"Total rows in input DF: {df.count()}")
 
-# --------------------------------------------------------
-# Map the aspect seeds to aspect buckets 
-# via char-gram TF-IDF + Cosine Similarity
-# --------------------------------------------------------
-print("\n========== Extract unique terms from df with aspect seeds ======================")
+
+print("\n========== Extract unique terms in aspect seeds from input df =====")
 unique_terms = (
-    df.select(lower(col("aspect_seed")).alias("term_lc"))
-      .where(F.col("term_lc").isNotNull() & (F.length("term_lc") > 0))
+    df.select(lower(col("aspect_seed")).alias("unique_terms"))
+      .where(F.col("unique_terms").isNotNull() & (F.length("unique_terms") > 0))
       .distinct()
       .rdd
-      .map(lambda r: r["term_lc"].strip())
+      .map(lambda r: r["unique_terms"].strip())
       .filter(lambda s: len(s) > 0)
       .collect()
 )
 print(f"Unique aspect terms collected: {len(unique_terms)}")
 
 
-print("\n========== Build char-gram TF-IDF vectorizer and score =========================")
+print("\n========== Build char-gram TF-IDF vectorizer ===================================")
 prototype_texts = [MAPPINGS[a] for a in ASPECTS]
 
-# Char-gram vectorizer: robust to typos/morphology
-# analyzer="char_wb" ensures ngrams don't cross whitespace boundaries
 vec = TfidfVectorizer(
+    # Extracts features from character word based n-grams. 
+    # This means it will consider sequences of characters within a word, rather than whole words. 
+    # e.g., in the word "apple", it would extract "app", "ppl", "ple" for trigrams.
     analyzer="char_wb",
+    # specify minimum and maximum length of the character n-grams to extract.
     ngram_range=(3, 5),
+    # Converts all text to lowercase before processing
     lowercase=True,
+    # it applies the transformation (1+log(tf)) to the term frequency, 
+    # which helps to reduce the weight of very frequent terms.
     sublinear_tf=True,
+    # any n-gram that appears in at least one document will be included in the vocabulary. 
     min_df=1
 )
 
-# Fit on vocab derived from both unique terms and prototypes
+# Fit on vocabularies derived from both unique terms and prototypes
 vec.fit(unique_terms + prototype_texts)
 
-# Transform prototypes and normalize
-P = vec.transform(prototype_texts)  # shape [A, D]
-P = l2_normalize_csr(P)
+# Transform prototypes and normalize : shape [A, D]
+P = vec.transform(prototype_texts)  
+P = l2_normalize_csr(P) 
 
-# Transform unique terms and normalize
-U = vec.transform(unique_terms)     # shape [N, D]
+# Transform unique terms and normalize : shape [N, D]
+U = vec.transform(unique_terms)
 U = l2_normalize_csr(U)
 
-# Cosine similarity is dot product of L2-normalized rows
-S = U @ P.T  # shape [N, A]; can be sparse COO/CSR depending on backend
+# Calculate the Cosine similarity between the prototype and unique terms. 
+# Cosine similarity is dot product of L2-normalized rows : shape [A, D] s@ [N, D] = [N, A]
+S = U @ P.T  
 
-# Ensure dense numpy arrays for argmax and max values
-# argmax on sparse -> returns matrix; convert explicitly to ndarray
+# Map unique term to pre-defined aspect with the largest cosine similarity
+# Get the index with the largest cosine similarity per row as 1D array
 best_idx = np.array(S.argmax(axis=1)).ravel()
 
 # Get max similarity per row as 1D array
@@ -267,36 +273,33 @@ if hasattr(S, "toarray"):
 else:
     best_sim = np.array(S.max(axis=1)).ravel()
 
-THRESH_LEX = 0.04  # tune as needed
+THRESH_LEX = 0.04  # hyperparameter, tune as needed
 
 # assign label if similarity above threshold
-assigned = [
+assigned_aspect = [
     ASPECTS[int(i)] if float(s) >= THRESH_LEX else ""
     for i, s in zip(best_idx, best_sim)
 ]
 
 # Create mapping DataFrame (driver → Spark)
 df_panda_mapping = pd.DataFrame({
-    "term_lc": unique_terms,
-    "aspect": assigned,
-    "sim_lex": best_sim
+    "unique_terms": unique_terms,
+    "aspect": assigned_aspect,
+    "similarity": best_sim
 })
 # (optional) keep top-k debugging columns
 # mapping_pdf["best_label"] = [ASPECTS[i] for i in best_idx]
 
 df_spark_mapping = spark.createDataFrame(df_panda_mapping)
 
-print("\n========== Apply Mapping  ==============================================")
-# --------------------------------------------------------
+print("\n========== Apply Mapping  ======================================================")
 # Join mapping back to the original DF
-# --------------------------------------------------------
 df_term_bucket = (
-    df.withColumn("term_lc", lower(col("aspect_seed")))
-      .join(df_spark_mapping.select("term_lc", "aspect"), on="term_lc", how="left")
+    df.withColumn("unique_terms", lower(col("aspect_seed")))
+      .join(df_spark_mapping.select("unique_terms", "aspect"), on="unique_terms", how="left")
 )
-
-df_term_bucket = df_term_bucket.drop("term_lc")
-df_term_bucket.show(1, truncate=False)
+df_term_bucket = df_term_bucket.drop("unique_terms")
+df_term_bucket.show(10, truncate=False)
 
 # use lexical matching to fill in any missing aspects
 print("\n========== Fill in missing aspects via lexical matching ========================")
@@ -308,7 +311,7 @@ transformed_rdd = rdd_term_bucket.map(process_row)
 df_output = transformed_rdd.toDF()
 
 # Show the output DataFrame
-df_output.show(truncate=False)
+df_output.show(10, truncate=False)
 
 # cast aspect_negated to boolean
 df_output = df_output.withColumn("aspect_negated", F.col("aspect_negated").cast("boolean"))
