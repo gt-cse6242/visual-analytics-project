@@ -1,57 +1,58 @@
 """
-Run the Yelp reviews pipeline end-to-end.
+Run the Yelp pipeline end-to-end (convert -> join -> sample -> ABSA -> wordcloud).
 
-Steps:
-    1) Convert reviews JSON -> Parquet (partitioned by review_year)
-    2) Join business data onto reviews
-    3) Read enriched Parquet and print a sample + tiny aggregation
-
-Usage examples:
-    python run_all.py                            # run all steps
-    python run_all.py --skip-review              # skip step 1
-    python run_all.py --skip-review --skip-join  # only read/sample
-    python run_all.py --years 2018 2019 --sample 20
+Usage:
+    python run_all.py
 
 Notes:
-    Requires PySpark, Java 11, and the Yelp dataset in yelp_dataset/.
+    - Requires Java 11, PySpark, spaCy + en_core_web_sm
+    - Expects Yelp JSON under yelp_dataset/
 """
-import argparse
+
+import os
+import tempfile
 import time
 import sys
-import subprocess
-
-# Step modules
-from jobs import yelp_review as reviews_step
-from enriched import join_reviews_with_business as join_step
 
 from pyspark.sql import SparkSession
 from pyspark.sql.functions import col
 
+from jobs import yelp_review as reviews_step
+from enriched import join_reviews_with_business as join_step
+import extract_aspects as aspects_step
+from enriched import make_review_wordcloud as wc
+
+REVIEWS_JSON = "yelp_dataset/yelp_academic_dataset_review.json"
+REVIEWS_PARQUET = "parquet/yelp_review"
 ENRICHED_PARQUET = "parquet/yelp_review_enriched"
+WORDCLOUD_OUTPUT = "out/review_wordcloud.png"
+WORDCLOUD_TOP = 200
 
 
-def read_and_sample(years=None, sample_rows=10):
+def _safe_tmpdir() -> str:
+    tmpdir = os.path.join(tempfile.gettempdir(), "spark-local")
+    os.makedirs(tmpdir, exist_ok=True)
+    return tmpdir
+
+
+def read_and_sample(sample_rows=10):
     t0 = time.time()
+    tmpdir = _safe_tmpdir()
     spark = (
         SparkSession.builder
         .appName("ReadEnrichedYelpReviews-Pipeline")
+        .config("spark.local.dir", tmpdir)
+        .config("spark.driver.extraJavaOptions", f"-Djava.io.tmpdir={tmpdir}")
+        .config("spark.executor.extraJavaOptions", f"-Djava.io.tmpdir={tmpdir}")
         .config("spark.driver.memory", "4g")
         .getOrCreate()
     )
     spark.sparkContext.setLogLevel("WARN")
 
-    # Load partitions
-    if years:
-        paths = [f"{ENRICHED_PARQUET}/review_year={y}" for y in years]
-        df = spark.read.parquet(*paths)
-    else:
-        df = spark.read.parquet(ENRICHED_PARQUET)
+    df = spark.read.parquet(ENRICHED_PARQUET)
 
     print("\nSchema:")
     df.printSchema()
-
-    if years:
-        df = df.filter(col("review_year").isin(years))
 
     print(f"\nInput partitions: {df.rdd.getNumPartitions()}")
 
@@ -78,52 +79,74 @@ def read_and_sample(years=None, sample_rows=10):
     spark.stop()
 
 
+def run_wordcloud(top_k: int = WORDCLOUD_TOP, output_png: str = WORDCLOUD_OUTPUT):
+    tmpdir = _safe_tmpdir()
+    spark = (
+        SparkSession.builder
+        .appName("MakeReviewWordcloud-Pipeline")
+        .config("spark.local.dir", tmpdir)
+        .config("spark.driver.extraJavaOptions", f"-Djava.io.tmpdir={tmpdir}")
+        .config("spark.executor.extraJavaOptions", f"-Djava.io.tmpdir={tmpdir}")
+        .config("spark.pyspark.python", sys.executable)
+        .config("spark.pyspark.driver.python", sys.executable)
+        .config("spark.driver.memory", "4g")
+        .getOrCreate()
+    )
+    spark.sparkContext.setLogLevel("WARN")
+
+    freqs = wc.build_wordcounts(
+        spark=spark,
+        reviews_parquet=ENRICHED_PARQUET,  # enriched also has `text`
+        years=None,
+        min_length=3,
+        top_k=top_k,
+    )
+    out_file = wc.make_wordcloud(freqs, output_path=output_png)
+    print(f"Saved wordcloud to: {out_file}")
+    spark.stop()
+
+
 def main():
-    parser = argparse.ArgumentParser(description="Run Yelp review pipeline end-to-end")
-    parser.add_argument("--skip-review", action="store_true", help="Skip converting reviews JSON to Parquet")
-    parser.add_argument("--skip-join", action="store_true", help="Skip joining business onto reviews")
-    parser.add_argument("--years", nargs="*", type=int, default=None, help="Optional list of years to read/show")
-    parser.add_argument("--sample", type=int, default=10, help="Number of sample rows to display")
-    # Wordcloud options
-    parser.add_argument("--make-wordcloud", action="store_true", help="Generate a wordcloud (or bar chart fallback) from review text")
-    parser.add_argument("--wordcloud-output", default="out/review_wordcloud.png", help="Output PNG path for the wordcloud/bar chart")
-    parser.add_argument("--wordcloud-top", type=int, default=200, help="Number of words to include in the wordcloud/bar chart")
-    args = parser.parse_args()
+    print("\n" + "="*60)
+    print("YELP REVIEWS PIPELINE - Running all steps")
+    print("="*60)
 
-    if not args.skip_review:
-        print("\n=== Step 1/3: Convert reviews JSON -> Parquet ===")
-        reviews_step.main()
-    else:
-        print("\n=== Step 1/3: Skipped reviews conversion ===")
+    # Step 1: Convert reviews JSON -> Parquet (partitioned by review_year)
+    print("\n=== Step 1/5: Convert reviews JSON -> Parquet ===")
+    reviews_step.main(input_path=REVIEWS_JSON, output_path=REVIEWS_PARQUET)
 
-    if not args.skip_join:
-        print("\n=== Step 2/3: Join reviews with business ===")
-        join_step.main()
-    else:
-        print("\n=== Step 2/3: Skipped join ===")
+    # Step 2: Join business attributes onto reviews -> enriched Parquet
+    print("\n=== Step 2/5: Join reviews with business ===")
+    join_step.main(
+        reviews_parquet=REVIEWS_PARQUET,
+        business_json="yelp_dataset/yelp_academic_dataset_business.json",
+        output_path=ENRICHED_PARQUET,
+    )
 
-    print("\n=== Step 3/3: Read enriched Parquet and sample ===")
-    read_and_sample(years=args.years, sample_rows=args.sample)
+    # Step 3: Inspect enriched Parquet (schema, counts, sample, tiny aggregation)
+    print("\n=== Step 3/5: Read enriched Parquet and sample ===")
+    read_and_sample(sample_rows=10)
 
-    # Optional Step 4: Generate wordcloud using a separate module invocation to avoid CLI arg conflicts
-    if args.make_wordcloud:
-        print("\n=== Step 4: Generate wordcloud from reviews text ===")
-        cmd = [
-            sys.executable,
-            "-m",
-            "enriched.make_review_wordcloud",
-            "--reviews", "parquet/yelp_review_enriched",  # use enriched output from this run
-            "--output", args.wordcloud_output,
-            "--top", str(args.wordcloud_top),
-            "--no-generate",  # avoid regeneration since pipeline already ran
-        ]
-        if args.years:
-            cmd.extend(["--years", *[str(y) for y in args.years]])
-        print("Running:", " ".join(cmd))
-        try:
-            subprocess.run(cmd, check=True)
-        except subprocess.CalledProcessError as e:
-            print("Wordcloud generation failed:", e)
+    # Step 4: Extract aspect-based sentiment (ABSA) from restaurant reviews (sampled)
+    print("\n=== Step 4/5: Extract aspect-based sentiment (ABSA) ===")
+    aspects_step.extract_aspect_from_text(
+        input_path=ENRICHED_PARQUET,
+        text_col="text",
+        meta_cols=["business_id","biz_name","stars","date","biz_categories"],
+        out_path="parquet/absa_restaurant_parquet",
+        seeds=aspects_step.RESTAURANT_SEEDS,
+        aspects=aspects_step.ASPECTS,
+        spacy_model="en_core_web_sm",
+        repartition_n=1
+    )
+
+    # Step 5: Generate a wordcloud PNG from review text
+    print("\n=== Step 5/5: Generate wordcloud ===")
+    run_wordcloud()
+
+    print("\n" + "="*60)
+    print("PIPELINE COMPLETE!")
+    print("="*60)
 
 
 if __name__ == "__main__":
