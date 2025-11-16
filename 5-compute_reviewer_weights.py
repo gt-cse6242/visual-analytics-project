@@ -70,7 +70,7 @@ def main():
     out_dir = "parquet/yelp_user_weights"
     print(f"\n💾 Writing reviewer weights to {out_dir}")
     reviewer_stats.write.mode("overwrite").parquet(out_dir)
-    print(f"Done in {time.time()-t0:.2f}s")
+    print(f"✅ Done in {time.time()-t0:.2f}s")
 
     spark.stop()
 

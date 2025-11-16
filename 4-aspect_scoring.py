@@ -28,7 +28,7 @@ t0 = time.time()
 # --------------------------------------------------------
 spark = (
     SparkSession.builder
-    .appName("AspectTermBucketing-CharGram")
+    .appName("AspectScoring")
     # make sure executors use your venv python
     .config("spark.sql.shuffle.partitions", "4")
     .config("spark.pyspark.python", sys.executable)
@@ -259,8 +259,12 @@ df_result = df_grouped.groupBy("review_id",
                                "business_id",
                                "biz_name",
                                "biz_categories",
+                               "biz_city",
+                               "biz_state",
+                               "date",
                                "stars",
-                               "aspect").agg(
+                               "aspect",
+                               ).agg(
     F.sum(F.when(F.col("sentiment") == "positive", 1).otherwise(0)).alias("positive_aspect_count"),
     F.sum(F.when(F.col("sentiment") == "negative", 1).otherwise(0)).alias("negative_aspect_count")
 ).withColumn(
@@ -278,7 +282,7 @@ out_path = "parquet/yelp_review_restaurant_review_level_scoring"
 print(f"\n========== Save to {out_path} ==========")
 df_result.write.mode("overwrite").parquet(out_path)
 
-# df_result.toPandas().to_csv("5-aspect_sentiment_results.csv", index=False)
+# df_result.toPandas().to_csv("4-aspect_scoring.csv", index=False)
 
 spark.stop()
 

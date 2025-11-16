@@ -23,8 +23,12 @@ import pandas as pd
 import re
 from sklearn.feature_extraction.text import TfidfVectorizer
 import sys
+import time
 
-from pyspark.sql.functions import col, lower
+# --------------------------------------------------------
+# Start Timer
+# --------------------------------------------------------
+t0 = time.time()
 
 print("\n========== Load the Aspect MAPPINGS ===========================================")
 MAPPINGS = {
@@ -218,7 +222,7 @@ print(f"Total rows in input DF: {df.count()}")
 
 print("\n========== Extract unique terms in aspect seeds from input df =====")
 unique_terms = (
-    df.select(lower(col("aspect_seed")).alias("unique_terms"))
+    df.select(F.lower(F.col("aspect_seed")).alias("unique_terms"))
       .where(F.col("unique_terms").isNotNull() & (F.length("unique_terms") > 0))
       .distinct()
       .rdd
@@ -233,7 +237,7 @@ print("\n========== Build char-gram TF-IDF vectorizer ==========================
 prototype_texts = [MAPPINGS[a] for a in ASPECTS]
 
 vec = TfidfVectorizer(
-    # Extracts features from character word based n-grams. 
+    # Extracts features from characters based n-grams. 
     # This means it will consider sequences of characters within a word, rather than whole words. 
     # e.g., in the word "apple", it would extract "app", "ppl", "ple" for trigrams.
     analyzer="char_wb",
@@ -252,10 +256,14 @@ vec = TfidfVectorizer(
 vec.fit(unique_terms + prototype_texts)
 
 # Transform prototypes and normalize : shape [A, D]
+# A = number of aspects (e.g., 4: food, service, ambience, price)
+# D = vocabulary size (all character n-grams learned from fit)
 P = vec.transform(prototype_texts)  
 P = l2_normalize_csr(P) 
 
 # Transform unique terms and normalize : shape [N, D]
+# N = number of unique extracted terms
+# D = same vocabulary size as P
 U = vec.transform(unique_terms)
 U = l2_normalize_csr(U)
 
@@ -295,7 +303,7 @@ df_spark_mapping = spark.createDataFrame(df_panda_mapping)
 print("\n========== Apply Mapping  ======================================================")
 # Join mapping back to the original DF
 df_term_bucket = (
-    df.withColumn("unique_terms", lower(col("aspect_seed")))
+    df.withColumn("unique_terms", F.lower(F.col("aspect_seed")))
       .join(df_spark_mapping.select("unique_terms", "aspect"), on="unique_terms", how="left")
 )
 df_term_bucket = df_term_bucket.drop("unique_terms")
@@ -327,5 +335,11 @@ df_output.printSchema()
 out_path = "parquet/yelp_review_restaurant_with_extracted_aspects"
 print(f"\n========== Save to {out_path} ==========")
 df_output.write.mode("overwrite").parquet(out_path)
+# df_term_bucket.limit(20000).toPandas().to_csv(f"3-aspect_mapping_using_tfid.csv")
 
 spark.stop()
+
+# --------------------------------------------------------
+# End Timer
+# --------------------------------------------------------
+print(f"✅ Done in {time.time()-t0:.2f}s")

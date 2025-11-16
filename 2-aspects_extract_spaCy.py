@@ -15,6 +15,12 @@ from pyspark.sql.functions import col, lower
 from pyspark.sql import Row
 import spacy
 import sys
+import time
+
+# --------------------------------------------------------
+# Start Timer
+# --------------------------------------------------------
+t0 = time.time()
 
 
 # ------------ NLP HELPER FUNCTIONS ------------
@@ -311,7 +317,7 @@ spark = (
 
 input_path = "parquet/yelp_review_restaurant"
 text_col   = "text"
-meta_cols  = ["review_id","business_id","stars","user_id","biz_name","biz_categories"] 
+meta_cols  = ["review_id","business_id","stars","user_id","biz_name","biz_categories","biz_city","biz_state","date","review_year"] 
 spacy_model = "en_core_web_sm"
 repartition_n = 1
 
@@ -360,8 +366,6 @@ result_df = spark.createDataFrame(rdd, schema=schema)
 
 # result_df = result_df.limit(10000)
 
-print(f"I'm here")
-
 # # ========= Repartition if needed =========
 # if repartition_n:
 #     result_df = result_df.repartition(repartition_n)
@@ -373,5 +377,10 @@ print(f"[info] wrote Parquet → {out_path}")
 # result_df.limit(20000).toPandas().to_csv(f"{out_path}_{data_size if str(data_size) else ''}/../restaurant_reviews_with_aspect_extracted.csv")
 
 spark.stop()
+
+# --------------------------------------------------------
+# End Timer
+# --------------------------------------------------------
+print(f"✅ Done in {time.time()-t0:.2f}s")
 
 

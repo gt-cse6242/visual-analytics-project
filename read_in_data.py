@@ -18,7 +18,7 @@ spark = (
 spark.sparkContext.setLogLevel("ERROR")
 
 
-df = spark.read.parquet("<insert your parquet file>")
+df = spark.read.parquet("parquet/yelp_review_restaurant_review_level_scoring").orderBy("review_id")
 
 df.printSchema()
 
@@ -26,5 +26,5 @@ df.show(200, truncate=False)
 
 out_path = "xxxx.csv"
 print(f"\n========== Save to {out_path} ==========")
-df.toPandas().to_csv(out_path, index=False)
+df.limit(1000).toPandas().to_csv(out_path, index=False)
 
