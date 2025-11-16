@@ -2,14 +2,17 @@
 
 From visual-analytics-project directory:
 
-On MacOS (either works):
+On MacOS :
 
-- chmod +x ./setup/mac/run_streamlit.sh
+- cd algorithm-prototype
+
 - ./setup/mac/run_streamlit.sh
 
 On Windows:
 
-- ../../setup/windows/run_streamlit.bat
+- ./setup/windows/run_streamlit.bat
+
+Head to localhost:8501
 
 # Phase I: Data Pre-processing (ETL)
 

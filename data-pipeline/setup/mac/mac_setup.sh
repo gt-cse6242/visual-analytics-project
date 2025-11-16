@@ -11,9 +11,24 @@ set -euo pipefail
 #   ./mac_setup.sh --run-all       # after setup, run the full pipeline (only if Yelp dataset present)
 #   ./mac_setup.sh --export --run-all
 
-PROJECT_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+## Resolve repository root by searching for a `.git` folder so the script behaves
+## the same whether invoked from project root or from inside `data-pipeline/`.
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+SEARCH_DIR="$SCRIPT_DIR"
+while [ "$SEARCH_DIR" != "/" ] && [ ! -d "$SEARCH_DIR/.git" ]; do
+  SEARCH_DIR="$(dirname "$SEARCH_DIR")"
+done
+if [ -d "$SEARCH_DIR/.git" ]; then
+  PROJECT_ROOT="$SEARCH_DIR"
+else
+  # fallback to the original behavior (two levels up from this script)
+  PROJECT_ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
+fi
+
+# Use the repo-level .venv so we don't create venvs inside subfolders
 VENV="$PROJECT_ROOT/.venv"
-PYTHON_CMD="${PYTHON:-python3}"
+# Prefer python3.10 if available for binary wheel compatibility
+PYTHON_CMD="${PYTHON:-python3.10}"
 
 # Flags
 DO_EXPORT=false
@@ -70,6 +85,13 @@ else
   echo "No requirements.txt found in project root; skipping pip install."
 fi
 
+# If the pipeline was moved into data-pipeline/, install its requirements too
+DP_REQ="$PROJECT_ROOT/data-pipeline/requirements.txt"
+if [ -f "$DP_REQ" ]; then
+  echo "Installing data-pipeline requirements from $DP_REQ"
+  python -m pip install -r "$DP_REQ"
+fi
+
 echo "Installing spaCy English model (en_core_web_sm)"
 python -m spacy download en_core_web_sm || true
 
@@ -97,16 +119,34 @@ if [ "$DO_EXPORT" = true ]; then
 fi
 
 echo "Running Spark smoke test (test_spark.py) with venv Python set for driver and worker..."
-PYSPARK_PYTHON="$PYSPARK_PY" PYSPARK_DRIVER_PYTHON="$PYSPARK_PY" python "$PROJECT_ROOT/test_spark.py"
+# Prefer pipeline-local test_spark.py if pipeline was moved into data-pipeline/
+DP_DIR="$PROJECT_ROOT/data-pipeline"
+if [ -f "$DP_DIR/test_spark.py" ]; then
+  PYSPARK_PYTHON="$PYSPARK_PY" PYSPARK_DRIVER_PYTHON="$PYSPARK_PY" python "$DP_DIR/test_spark.py"
+else
+  PYSPARK_PYTHON="$PYSPARK_PY" PYSPARK_DRIVER_PYTHON="$PYSPARK_PY" python "$PROJECT_ROOT/test_spark.py"
+fi
 
 # Optionally run full pipeline if requested and dataset files are present
 if [ "$DO_RUN_ALL" = true ]; then
-  REVIEWS_JSON="$PROJECT_ROOT/yelp_dataset/yelp_academic_dataset_review.json"
-  BUSINESS_JSON="$PROJECT_ROOT/yelp_dataset/yelp_academic_dataset_business.json"
+  # Prefer Yelp dataset located in data-pipeline/ when the pipeline was moved
+  if [ -d "$PROJECT_ROOT/data-pipeline/yelp_dataset" ]; then
+    REVIEWS_JSON="$PROJECT_ROOT/data-pipeline/yelp_dataset/yelp_academic_dataset_review.json"
+    BUSINESS_JSON="$PROJECT_ROOT/data-pipeline/yelp_dataset/yelp_academic_dataset_business.json"
+  else
+    REVIEWS_JSON="$PROJECT_ROOT/yelp_dataset/yelp_academic_dataset_review.json"
+    BUSINESS_JSON="$PROJECT_ROOT/yelp_dataset/yelp_academic_dataset_business.json"
+  fi
 
-  if [ -f "$REVIEWS_JSON" ] && [ -f "$BUSINESS_JSON" ]; then
+    if [ -f "$REVIEWS_JSON" ] && [ -f "$BUSINESS_JSON" ]; then
     echo "Found Yelp dataset files; running full pipeline (run_all.py). This may take a long time..."
-    PYSPARK_PYTHON="$PYSPARK_PY" PYSPARK_DRIVER_PYTHON="$PYSPARK_PY" python "$PROJECT_ROOT/run_all.py"
+    # If the main pipeline was moved into data-pipeline/, prefer that copy so imports resolve
+    if [ -f "$DP_DIR/run_all.py" ]; then
+      # Run from inside data-pipeline/ so relative paths (yelp_dataset/, jobs/, enriched/) resolve
+      (cd "$DP_DIR" && PYSPARK_PYTHON="$PYSPARK_PY" PYSPARK_DRIVER_PYTHON="$PYSPARK_PY" python run_all.py)
+    else
+      PYSPARK_PYTHON="$PYSPARK_PY" PYSPARK_DRIVER_PYTHON="$PYSPARK_PY" python "$PROJECT_ROOT/run_all.py"
+    fi
   else
     echo "--run-all requested but Yelp dataset files not found in $PROJECT_ROOT/yelp_dataset/" >&2
     echo "Expected: $REVIEWS_JSON and $BUSINESS_JSON" >&2

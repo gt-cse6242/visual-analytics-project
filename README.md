@@ -1,315 +1,90 @@
-## Yelp Visual Analytics
+# Visual Analytics Project
 
-Turn the Yelp Open Dataset into analysis-ready Parquet, join business attributes, preview samples, and optionally run aspect-based sentiment analysis (ABSA) and a wordcloud.
+## Getting Started
 
----
+1. Start with `data-pipeline/README.md` to understand data acquisition, preprocessing, and storage.
+2. Proceed to `algorithm-prototype/README.md` for model logic, experimentation, and evaluation.
+3. Open up localhost:8501 for the streamlit app
 
-## 📋 Prerequisites
+## Order Rationale
 
-- **Java 11 (JDK 11)** - Required for PySpark
-- **Python 3.10+** - For running the scripts
-- **Yelp Open Dataset** - Place these files in `yelp_dataset/`:
-  - `yelp_academic_dataset_review.json` (required)
-  - `yelp_academic_dataset_business.json` (required)
+Data pipeline outputs are prerequisites for the prototype algorithms.
 
----
+## Quick Links
 
-## 🚀 Quick Start
+- [Data Pipeline README](data-pipeline/README.md)
+- [Algorithm Prototype README](algorithm-prototype/README.md)
 
-### For Mac/Linux Users
+## Next Steps
 
-1. **Install Prerequisites**
+After both, integrate results into visualization or deployment layers as needed.
 
-   ```bash
-   # Install Java 11 (if not already installed)
-   # Mac:
-   brew install openjdk@11
+## Troubleshooting & Debugging
 
-   # Linux (Ubuntu/Debian):
-   sudo apt-get install openjdk-11-jdk
-   ```
+If the setup or pipeline doesn't run with the instructions in this repo, try these focused checks in order. These are the most common issues we've seen (Python minor-version mismatch, Java, PySpark driver/worker mismatch, or spaCy wheel/build problems).
 
-2. **Setup Python Environment**
+Checklist (quick):
 
-   ```bash
-   python3 -m venv .venv
-   source .venv/bin/activate
-   pip install -r requirements.txt
-   python -m spacy download en_core_web_sm
-   ```
+- Confirm the Python version used for the repo virtualenv is 3.10.x (recommended). Many binary wheels (numpy, spaCy) are published for stable Python minors and can fail to build from source on newer, very recent Python versions.
+- Ensure Java 11 is installed and on PATH (OpenJDK 11 is required for Spark compatibility with our tests).
+- If Spark jobs fail with a Python-version-mismatch error, make sure the same Python executable is used for both driver and workers (set PYSPARK_PYTHON/PYSPARK_DRIVER_PYTHON to the venv python).
 
-3. **Run the Pipeline**
+Useful commands / checks
 
-   ```bash
-   python run_all.py
-   ```
-
-4. **Automated mac setup (optional)**
-
-   To simplify setup on macOS there's a small helper script included: `setup/mac/mac_setup.sh`.
-
-   What it does:
-
-   - Creates or reuses a virtualenv at `.venv`
-   - Installs `requirements.txt` into the venv
-   - Downloads the spaCy English model (`en_core_web_sm`)
-   - Writes a project `.env` with `PYSPARK_PYTHON`/`PYSPARK_DRIVER_PYTHON` pointing to the venv Python
-   - Runs the Spark smoke test (`test_spark.py`) to verify Spark + PySpark
-
-   Usage:
-
-   ```bash
-   # Run setup and smoke test
-   ./setup/mac/mac_setup.sh
-
-   # Run setup and append env vars to your ~/.zshrc so future shells have them
-   ./setup/mac/mac_setup.sh --export
-
-   # Run setup and then the full pipeline (only runs if Yelp dataset files are present in yelp_dataset/)
-   ./setup/mac/mac_setup.sh --run-all
-   ```
-
-   After the script finishes you can activate the venv and optionally source the `.env` file:
-
-   ```bash
-   source .venv/bin/activate
-   source .env   # optional, sets PYSPARK_* env vars for Spark runs
-   ```
-
-   Note: the script is idempotent and non-destructive; it will reuse an existing `.venv` if present.
-
-### For Windows Users (WSL Required)
-
-**⚠️ Important:** PySpark does not work reliably on native Windows, especially with usernames containing special characters (spaces, apostrophes, etc.). **Use WSL (Windows Subsystem for Linux)** instead.
-
-#### First Time: Install WSL
-
-If you don't have WSL installed:
-
-1. **Install WSL** (PowerShell as Administrator):
-
-   ```powershell
-   wsl --install
-   ```
-
-   This installs WSL2 with Ubuntu by default.
-
-2. **Restart your computer** when prompted.
-
-3. **Set up Ubuntu**: Launch "Ubuntu" from Start menu, create a username and password.
-
-#### Setup the Project in WSL
-
-1. **Navigate to project** (PowerShell in project directory):
-
-   ```powershell
-   cd path\to\visual-analytics-project
-   ```
-
-2. **Run setup script** (one-time setup):
-
-   ```powershell
-   wsl bash setup/windows/setup_wsl.sh
-   ```
-
-   - Enter your WSL/Ubuntu password when prompted
-   - Installs Java 11, Python packages, and spacy model
-   - Takes 5-10 minutes
-
-3. **Run the pipeline**:
-
-   ```powershell
-   setup/windows/run_wsl.bat
-   ```
-
-   Or alternatively:
-
-   ```powershell
-   wsl bash setup/windows/run_wsl.sh
-   ```
-
-**That's it!** The batch file automatically handles paths and environment activation.
-
----
-
-## 📦 What `run_all.py` Does
-
-The pipeline runs 5 steps automatically:
-
-## 📦 What `run_all.py` Does
-
-The pipeline runs 5 steps automatically:
-
-1. **Convert reviews JSON → Parquet** (`parquet/yelp_review/`)
-2. **Join business attributes → enriched Parquet** (`parquet/yelp_review_enriched/`)
-3. **Read and sample enriched data** (displays schema, counts, sample)
-4. **Run ABSA on 1,000 restaurant reviews** → `parquet/absa_restaurant_parquet/` + CSV
-5. **Generate a wordcloud PNG** → `out/review_wordcloud.png`
-
----
-
-## 🔧 Optional: Run Individual Steps
-
-### Mac/Linux
-
-**Step 1 — Convert reviews JSON to Parquet**
+- Check Python version (should be 3.10.x):
 
 ```bash
-python jobs/yelp_review.py
-# or with custom paths
-python jobs/yelp_review.py --input yelp_dataset/yelp_academic_dataset_review.json --output parquet/yelp_review
+python3.10 --version || python --version
 ```
 
-**Step 2 — Join business onto reviews**
+- If a sub-venv was accidentally created inside `data-pipeline/` (we've seen `data-pipeline/.venv` created with an incompatible Python), remove it and re-run setup from the repo root with the intended Python:
 
 ```bash
-python enriched/join_reviews_with_business.py
-# or with custom paths
-python enriched/join_reviews_with_business.py --reviews parquet/yelp_review --business-json yelp_dataset/yelp_academic_dataset_business.json --output parquet/yelp_review_enriched
+# from repo root
+rm -rf data-pipeline/.venv   # remove accidental venv
+PYTHON=python3.10 ./data-pipeline/setup/mac/mac_setup.sh --run-all
 ```
 
-**Step 3 — Inspect enriched Parquet**
+- If pip starts building numpy or spaCy from source (long C/C++ compile logs), that's a sign the chosen Python doesn't have prebuilt wheels for your platform; switch to Python 3.10 and recreate the venv as shown above.
+
+- Check Java is available and the right major version:
 
 ```bash
-python enriched/read_joined_reviews.py
-# restrict to specific years
-python enriched/read_joined_reviews.py --years 2021 2022 --sample 10
+java -version
+# expect OpenJDK 11.x (e.g. "openjdk version \"11.0.xx\"")
 ```
 
-**Step 4 — Generate wordcloud**
+- Spark driver/worker Python mismatch: set these env vars to point to the repo venv python before running Spark tasks (or add them to your shell):
 
 ```bash
-python enriched/make_review_wordcloud.py --years 2022 --top 200 --output out/wordcloud_2022.png
+export PYSPARK_PYTHON=/full/path/to/your/repo/.venv/bin/python
+export PYSPARK_DRIVER_PYTHON=/full/path/to/your/repo/.venv/bin/python
+# then run pipeline (from repo root):
+cd data-pipeline
+. /full/path/to/your/repo/.venv/bin/activate
+python test_spark.py   # quick smoke test
+python run_all.py      # full pipeline
 ```
 
-### Windows (WSL)
-
-Same commands, but prefix with WSL activation:
-
-```powershell
-wsl bash -c "source ~/.venv-visual-analytics/bin/activate && cd <project-path> && python jobs/yelp_review.py"
-```
-
-Or open WSL terminal and run commands directly after activating venv.
-
----
-
-## 🎯 ABSA Configuration
-
-The ABSA step (`extract_aspects.py`) is configured to:
-
-- Read from `parquet/yelp_review_enriched`
-- Filter to restaurants via `biz_categories` containing "restaurants"
-- Limit to **1,000 reviews** by default (for reasonable runtime)
-- Output to `parquet/absa_restaurant_parquet/`
-
-To process more reviews, edit `data_size` in `extract_aspects.py`.
-
----
-
-## 🐛 Troubleshooting
-
-**Windows: PySpark fails with socket/path errors**
-
-- Your Windows username likely contains special characters (apostrophes, spaces)
-- **Solution:** Use WSL (see setup above) - this is the only reliable way
-- Native Windows PySpark requires usernames without special characters
-
-**JAVA_GATEWAY_EXITED**
-
-- Install Java 11: `java -version` should show version 11.x
-- Mac: `brew install openjdk@11`
-- Linux: `sudo apt-get install openjdk-11-jdk-headless`
-- Windows (WSL): Run `setup_wsl.sh` which installs Java automatically
-
-**ModuleNotFoundError: pyspark or spacy**
-
-- Activate virtual environment first
-- Mac/Linux: `source .venv/bin/activate`
-- Windows (WSL): Virtual environment is activated automatically by `run_wsl.bat`
-- Then: `pip install -r requirements.txt && python -m spacy download en_core_web_sm`
-
-**No module named 'en_core_web_sm'**
-
-- Run: `python -m spacy download en_core_web_sm` (with venv active)
-
-**Parquet path not found**
-
-- Run earlier steps first or use `python run_all.py` to generate all outputs
-
-**Memory issues**
-
-- Keep ABSA sample at 1,000 reviews
-- Or adjust Spark memory configs in individual scripts if increasing sample size
-
-**WSL: "wsl command not found" (Windows)**
-
-- Install WSL first: `wsl --install` in PowerShell as Administrator
-- Restart computer after installation
-
----
-
-## 📁 Project Structure
-
-- **`run_all.py`** — Main pipeline orchestrator (convert → join → sample → ABSA → wordcloud)
-- **`run_wsl.sh`** / **`run_wsl.bat`** — Windows WSL helper scripts (moved to `setup/windows`)
-- **`setup_wsl.sh`** — One-time WSL environment setup (Java, Python, packages) (moved to `setup/windows`)
-- **`jobs/yelp_review.py`** — Convert reviews JSON → Parquet (partitioned by year)
-- **`enriched/join_reviews_with_business.py`** — Join business attributes onto reviews
-- **`enriched/read_joined_reviews.py`** — Inspect enriched Parquet (schema/counts/sample)
-- **`enriched/make_review_wordcloud.py`** — Generate wordcloud from review text
-- **`extract_aspects.py`** — Aspect-based sentiment extraction (restaurant-focused)
-- **`test_spark.py`** — Quick Spark smoke test
-
----
-
-## 📚 Requirements
-
-Main dependencies (see `requirements.txt` for versions):
-
-- **PySpark 3.5.x** — Distributed data processing
-- **pandas** — Data manipulation
-- **pyarrow** — Parquet file support
-- **spaCy** — NLP (+ `en_core_web_sm` model)
-- **wordcloud** — Word cloud generation
-- **matplotlib** — Visualization
-
----
-
-## ✅ Quick Spark Smoke Test
-
-Verify PySpark is working:
-
-**Mac/Linux:**
+- spaCy model issues: if a step complains about missing models, manually install the small English model:
 
 ```bash
-python test_spark.py
+. /full/path/to/your/repo/.venv/bin/activate
+python -m pip install -U pip
+python -m pip install spacy
+python -m spacy download en_core_web_sm
+python -m spacy validate
 ```
 
-**Windows (WSL):**
+- Where to look for outputs and logs (quick):
+  - Parquet outputs: `parquet/` (e.g., `parquet/yelp_review`, `parquet/yelp_review_enriched`, `parquet/absa_restaurant_parquet_1000`)
+  - Wordcloud / artifacts: `out/` (e.g., `out/review_wordcloud.png`)
 
-```powershell
-wsl bash -c "source ~/.venv-visual-analytics/bin/activate && cd <project-path> && python test_spark.py"
-```
+If the above don't resolve the issue, collect these items and open an issue or attach them to a PR request:
 
-Expected output:
+- Full console log (the failing step and any Python/compilation errors).
+- The output of `python --version` and `which python` (or `python3.10 --version`).
+- The output of `java -version`.
+- Whether a local venv was accidentally created inside `data-pipeline/` (if so, remove it as shown above).
 
-```
-Spark version: 3.5.7
-+---+------+
-| id| fruit|
-+---+------+
-|  1| apple|
-|  2|banana|
-+---+------+
-```
-
----
-
-## 💡 Tips
-
-- **First run takes longer**: Parquet conversion and ABSA are compute-intensive
-- **Subsequent runs are faster**: Parquet files are cached
-- **Adjust ABSA sample size**: Edit `data_size` in `extract_aspects.py` for more/fewer reviews
-- **Windows users**: Always use WSL - it's faster and more reliable than native Windows
-- **Check output folders**: `parquet/` contains all data, `out/` contains visualizations
+We're happy to help — if you open an issue include the items above and a short note about which setup script and command you ran.
