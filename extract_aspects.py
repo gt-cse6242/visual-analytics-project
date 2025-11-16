@@ -322,10 +322,36 @@ def extract_aspect_from_text(
     result_df.write.mode("overwrite").parquet(f"{out_path}_{data_size if str(data_size) else ''}")
     print(f"[info] wrote Parquet → {out_path}_{data_size if str(data_size) else ''}")
     result_df.toPandas().to_csv(f"{out_path}_{data_size if str(data_size) else ''}/restaurant_reviews_with_aspect_extracted.csv")
-    spark.stop()
+    spark.stop() 
 
-    return 
 
+# Map word Seeds to their target aspect categories
+RESTAURANT_SEEDS = {
+    "food": {
+        "food","dish","course","meal","taste","flavor","flavour","spice","seasoning","freshness",
+        "portion","serving","menu","appetizer","entree","dessert","pasta","sushi","burger","pizza",
+        "steak","noodle","soup","salad","bread","coffee","tea","drink","beverage","wine","cocktail",
+        "temperature","texture","presentation","sauce","vegan","vegetarian","gluten-free"
+    },
+    "service": {
+        "service","server","waiter","waitress","staff","waitstaff","host","hostess","bartender",
+        "manager","attitude","attentive","responsive","rude","friendly","professional",
+        "checkin","refill","timing","speed","slow","rush","tip","tipping"
+    },
+    "environment": {
+        "environment","ambience","ambiance","atmosphere","vibe","decor","music","noise","noisy",
+        "quiet","lighting","seating","table","booth","patio","view","crowded","space","spacious",
+        "cleanliness","clean","dirty","restroom","bathroom","parking","temperature","ac","air",
+        "smell","odor"
+    },
+    "price": {
+        "price","cost","value","expensive","cheap","overpriced","affordable","bill","check",
+        "portion-for-price","deal","discount","happy hour","fees","surcharge"
+    },
+}
+
+# target aspects to extract
+ASPECTS = {"food","service","environment","price"}
 
 
 if __name__ == "__main__":
@@ -336,37 +362,9 @@ if __name__ == "__main__":
     INPUT_PATH = ENRICHED_PARQUET
     TEXT_COL   = "text"
     META_COLS  = ["business_id","biz_name","stars","date","biz_categories"]   # put your columns here (or [])
-    OUT_PATH   = f"parquet/absa_restaurant_parquet"  # or set to None to return DF
+    OUT_PATH   = "parquet/absa_restaurant_parquet"  # or set to None to return DF
     SPACY_MODEL = "en_core_web_sm"
     REPARTITION = 1
-
-    # Map word Seeds to their target aspect categories
-    RESTAURANT_SEEDS = {
-        "food": {
-            "food","dish","course","meal","taste","flavor","flavour","spice","seasoning","freshness",
-            "portion","serving","menu","appetizer","entree","dessert","pasta","sushi","burger","pizza",
-            "steak","noodle","soup","salad","bread","coffee","tea","drink","beverage","wine","cocktail",
-            "temperature","texture","presentation","sauce","vegan","vegetarian","gluten-free"
-        },
-        "service": {
-            "service","server","waiter","waitress","staff","waitstaff","host","hostess","bartender",
-            "manager","attitude","attentive","responsive","rude","friendly","professional",
-            "checkin","refill","timing","speed","slow","rush","tip","tipping"
-        },
-        "environment": {
-            "environment","ambience","ambiance","atmosphere","vibe","decor","music","noise","noisy",
-            "quiet","lighting","seating","table","booth","patio","view","crowded","space","spacious",
-            "cleanliness","clean","dirty","restroom","bathroom","parking","temperature","ac","air",
-            "smell","odor"
-        },
-        "price": {
-            "price","cost","value","expensive","cheap","overpriced","affordable","bill","check",
-            "portion-for-price","deal","discount","happy hour","fees","surcharge"
-        },
-    }
-
-    # target aspects to extract
-    ASPECTS = {"food","service","environment","price"}
 
     # run the extraction
     extract_aspect_from_text(

@@ -42,3 +42,7 @@ __pycache__/
 *.pyc
 *.pyo
 *.pyd
+# Temporary directories
+temp/
+tempspark-*/
+
