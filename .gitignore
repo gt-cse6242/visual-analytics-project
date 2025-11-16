@@ -25,6 +25,7 @@ algorithm-prototype/Aspect*
 venv/
 env/
 .venv/
+.env
 .env/
 ENV/
 env.bak/

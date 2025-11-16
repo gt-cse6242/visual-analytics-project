@@ -39,9 +39,44 @@ Turn the Yelp Open Dataset into analysis-ready Parquet, join business attributes
    ```
 
 3. **Run the Pipeline**
+
    ```bash
    python run_all.py
    ```
+
+4. **Automated mac setup (optional)**
+
+   To simplify setup on macOS there's a small helper script included: `setup/mac/mac_setup.sh`.
+
+   What it does:
+
+   - Creates or reuses a virtualenv at `.venv`
+   - Installs `requirements.txt` into the venv
+   - Downloads the spaCy English model (`en_core_web_sm`)
+   - Writes a project `.env` with `PYSPARK_PYTHON`/`PYSPARK_DRIVER_PYTHON` pointing to the venv Python
+   - Runs the Spark smoke test (`test_spark.py`) to verify Spark + PySpark
+
+   Usage:
+
+   ```bash
+   # Run setup and smoke test
+   ./setup/mac/mac_setup.sh
+
+   # Run setup and append env vars to your ~/.zshrc so future shells have them
+   ./setup/mac/mac_setup.sh --export
+
+   # Run setup and then the full pipeline (only runs if Yelp dataset files are present in yelp_dataset/)
+   ./setup/mac/mac_setup.sh --run-all
+   ```
+
+   After the script finishes you can activate the venv and optionally source the `.env` file:
+
+   ```bash
+   source .venv/bin/activate
+   source .env   # optional, sets PYSPARK_* env vars for Spark runs
+   ```
+
+   Note: the script is idempotent and non-destructive; it will reuse an existing `.venv` if present.
 
 ### For Windows Users (WSL Required)
 
@@ -74,7 +109,7 @@ If you don't have WSL installed:
 2. **Run setup script** (one-time setup):
 
    ```powershell
-   wsl bash setup_wsl.sh
+   wsl bash setup/windows/setup_wsl.sh
    ```
 
    - Enter your WSL/Ubuntu password when prompted
@@ -84,13 +119,13 @@ If you don't have WSL installed:
 3. **Run the pipeline**:
 
    ```powershell
-   run_wsl.bat
+   setup/windows/run_wsl.bat
    ```
 
    Or alternatively:
 
    ```powershell
-   wsl bash run_wsl.sh
+   wsl bash setup/windows/run_wsl.sh
    ```
 
 **That's it!** The batch file automatically handles paths and environment activation.
@@ -217,8 +252,8 @@ To process more reviews, edit `data_size` in `extract_aspects.py`.
 ## 📁 Project Structure
 
 - **`run_all.py`** — Main pipeline orchestrator (convert → join → sample → ABSA → wordcloud)
-- **`run_wsl.sh`** / **`run_wsl.bat`** — Windows WSL helper scripts
-- **`setup_wsl.sh`** — One-time WSL environment setup (Java, Python, packages)
+- **`run_wsl.sh`** / **`run_wsl.bat`** — Windows WSL helper scripts (moved to `setup/windows`)
+- **`setup_wsl.sh`** — One-time WSL environment setup (Java, Python, packages) (moved to `setup/windows`)
 - **`jobs/yelp_review.py`** — Convert reviews JSON → Parquet (partitioned by year)
 - **`enriched/join_reviews_with_business.py`** — Join business attributes onto reviews
 - **`enriched/read_joined_reviews.py`** — Inspect enriched Parquet (schema/counts/sample)

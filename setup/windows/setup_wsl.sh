@@ -6,7 +6,7 @@
 #   wsl bash setup_wsl.sh
 #
 # Or from inside WSL:
-#   cd "/mnt/c/Users/Luke's Gaming PC/Documents/GATech/CSE6242/visual-analytics-project"
+#   cd "/mnt/c/Users/<your-windows-user>/path/to/visual-analytics-project"
 #   bash setup_wsl.sh
 
 set -e  # Exit on error
@@ -61,4 +61,3 @@ echo ""
 echo "Or simply run from PowerShell in the project directory:"
 echo "  run_wsl.bat"
 echo ""
-
