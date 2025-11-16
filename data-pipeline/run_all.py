@@ -22,10 +22,10 @@ from enriched import join_reviews_with_business as join_step
 import extract_aspects as aspects_step
 from enriched import make_review_wordcloud as wc
 
-REVIEWS_JSON = "yelp_dataset/yelp_academic_dataset_review.json"
-REVIEWS_PARQUET = "parquet/yelp_review"
-ENRICHED_PARQUET = "parquet/yelp_review_enriched"
-WORDCLOUD_OUTPUT = "out/review_wordcloud.png"
+REVIEWS_JSON = "../yelp_dataset/yelp_academic_dataset_review.json"
+REVIEWS_PARQUET = "../parquet/yelp_review"
+ENRICHED_PARQUET = "../parquet/yelp_review_enriched"
+WORDCLOUD_OUTPUT = "../out/review_wordcloud.png"
 WORDCLOUD_TOP = 200
 
 
@@ -119,7 +119,7 @@ def main():
     print("\n=== Step 2/5: Join reviews with business ===")
     join_step.main(
         reviews_parquet=REVIEWS_PARQUET,
-        business_json="yelp_dataset/yelp_academic_dataset_business.json",
+        business_json="../yelp_dataset/yelp_academic_dataset_business.json",
         output_path=ENRICHED_PARQUET,
     )
 
@@ -133,7 +133,7 @@ def main():
         input_path=ENRICHED_PARQUET,
         text_col="text",
         meta_cols=["business_id","biz_name","stars","date","biz_categories"],
-        out_path="parquet/absa_restaurant_parquet",
+        out_path="../parquet/absa_restaurant_parquet",
         seeds=aspects_step.RESTAURANT_SEEDS,
         aspects=aspects_step.ASPECTS,
         spacy_model="en_core_web_sm",

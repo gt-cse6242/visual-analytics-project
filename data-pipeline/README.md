@@ -103,13 +103,13 @@ If you don't have WSL installed:
 1. **Navigate to project** (PowerShell in project directory):
 
    ```powershell
-   cd path\to\visual-analytics-project
+   cd path\to\visual-analytics-project\data-pipeline
    ```
 
 2. **Run setup script** (one-time setup):
 
    ```powershell
-   wsl bash setup/windows/setup_wsl.sh
+   wsl bash ./setup/windows/setup_wsl.sh
    ```
 
    - Enter your WSL/Ubuntu password when prompted
@@ -119,7 +119,7 @@ If you don't have WSL installed:
 3. **Run the pipeline**:
 
    ```powershell
-   setup/windows/run_wsl.bat
+   ./setup/windows/run_wsl.bat
    ```
 
    Or alternatively:
