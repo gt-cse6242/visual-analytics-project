@@ -5,6 +5,17 @@ review_wordcloud.png
 yelp_dataset/
 parquet/
 
+# Ignore the dataset folder within algorithm-prototype folder
+algorithm-prototype/checkpoints/
+algorithm-prototype/checkpoints/*
+algorithm-prototype/checkpoints.json
+algorithm-prototype/parquet
+algorithm-prototype/.venv
+algorithm-prototype/Aspect*
+*.state_dict
+*.pt
+*.pth
+*.ckpt
 
 # Ignore system files
 .DS_Store
