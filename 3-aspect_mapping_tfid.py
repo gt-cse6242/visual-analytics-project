@@ -216,6 +216,7 @@ spark.sparkContext.setLogLevel("ERROR")
 input_path = "parquet/yelp_review_restaurant_with_aspect_seeds_extracted"  # sample from hayley_yelp_absa_extract_aspects_spaCy_v2.py output
 print(f"\n========== input from {input_path}) ==============================")
 df = spark.read.parquet(input_path)
+df = df.dropDuplicates()
 df.printSchema()
 print(f"Total rows in input DF: {df.count()}")
 
@@ -296,7 +297,9 @@ df_panda_mapping = pd.DataFrame({
     "similarity": best_sim
 })
 # (optional) keep top-k debugging columns
-# mapping_pdf["best_label"] = [ASPECTS[i] for i in best_idx]
+# df_panda_mapping_evaludate = df_panda_mapping
+# df_panda_mapping_evaludate["best_label"] = [ASPECTS[i] for i in best_idx]
+# df_panda_mapping_evaludate.iloc[:20000].to_csv(f"3-df_panda_mapping_evaludate.csv")
 
 df_spark_mapping = spark.createDataFrame(df_panda_mapping)
 
@@ -307,10 +310,10 @@ df_term_bucket = (
       .join(df_spark_mapping.select("unique_terms", "aspect"), on="unique_terms", how="left")
 )
 df_term_bucket = df_term_bucket.drop("unique_terms")
-df_term_bucket.show(10, truncate=False)
+# df_term_bucket.show(10, truncate=False)
 
 # use lexical matching to fill in any missing aspects
-print("\n========== Fill in missing aspects via lexical matching ========================")
+print("\n========== (Optional) Fill in missing aspects via lexical matching ========================")
 # Convert DataFrame to RDD
 rdd_term_bucket = df_term_bucket.rdd
 
@@ -319,7 +322,7 @@ transformed_rdd = rdd_term_bucket.map(process_row)
 df_output = transformed_rdd.toDF()
 
 # Show the output DataFrame
-df_output.show(10, truncate=False)
+# df_output.show(10, truncate=False)
 
 # cast aspect_negated to boolean
 df_output = df_output.withColumn("aspect_negated", F.col("aspect_negated").cast("boolean"))
@@ -335,7 +338,7 @@ df_output.printSchema()
 out_path = "parquet/yelp_review_restaurant_with_extracted_aspects"
 print(f"\n========== Save to {out_path} ==========")
 df_output.write.mode("overwrite").parquet(out_path)
-# df_term_bucket.limit(20000).toPandas().to_csv(f"3-aspect_mapping_using_tfid.csv")
+# df_term_bucket.sample(withReplacement=True, fraction=0.03, seed=3).toPandas().to_csv(f"3-aspect_mapping_using_tfid.csv")
 
 spark.stop()
 
