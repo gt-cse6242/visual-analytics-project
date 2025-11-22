@@ -256,6 +256,8 @@ Notes
 
 ## Project structure and pipeline (added)
 
+### 1. Import and Clean the Data Set + Word Cloud Creation
+
 We organized the processing scripts into two folders to keep ingestion and enrichment separate:
 
 - jobs/
@@ -273,23 +275,66 @@ Parquet outputs (created by the scripts):
 - parquet/yelp_review/
 - parquet/yelp_review_enriched/
 
+### 2. Run pipeline End to End with full restaurant datasets
+- 1-extract_restaurant_data.py - Extract only Restaurant data from parquet/yelp_review_enriched
+- 2-aspects_extract_spaCy.py - Extract the aspect seeds from the each review:
+- 3-aspect_mapping_tfidf.py - Map extracted aspect seeds to aspect categories using TF-IDF and cosine similarity
+- 4-aspect_scoring.py - Score the sentiments using extracted aspect opinions
+- 5-compute_reviewer_weights - Compute the reviewer credibility
+- 6-aspect_scoring_weighted.py - Calculated the weighted sentiment scores based on reviewer credibility
+
+### 3. Run the tf-idf and cosine similarity mapping evaluation against baseline method
+- 3.1-aspect_mapping_tfidf_evaluate.py - generate mapping using both proposed and baseline method. 
+- 3.1-aspect_mapping_tfidf_evaluate_manually_labeled.csv - manually labeled data and evaludation result.
+
+# Other scripts:
+- read_in_data.py - read in parquet files and exam the data
+- test_spark.py - smoke test for pyspark setup.
+- requirement.txt - includes all of the libraries needed to run the python script for:
+  - importing and cleaning the data
+  - word cloud creation
+  - run the end-to-end spaCy-enabled aspect-based sentiment analysis
+
+
 ## Usage (quickstart)
 
 From the repo root:
 
 - Convert reviews JSON → Parquet
-  - python jobs/yelp_review.py
+```
+python jobs/yelp_review.py
+```
 - Join business onto reviews to produce enriched Parquet
-  - python enriched/join_reviews_with_business.py
+```
+python enriched/join_reviews_with_business.py
+```
 - Inspect enriched output (schema, counts, sample/aggregation)
-  - python enriched/read_joined_reviews.py --years 2022 --sample 10
+```
+python enriched/read_joined_reviews.py --years 2022 --sample 10
+```
 - Create a review text wordcloud image (requires wordcloud + matplotlib)
-  - python -m pip install wordcloud matplotlib
-  - python enriched/make_review_wordcloud.py --years 2022 --top 200 --output out/wordcloud_2022.png
+```
+python -m pip install wordcloud matplotlib
+python enriched/make_review_wordcloud.py --years 2022 --top 200 --output out/wordcloud_2022.png
+```
 - Run all steps in one go
-  - python run_all.py # simplest: runs ingest + join + sample (no wordcloud)
-  - With wordcloud at the end (optional flags):
-    - python run_all.py --years 2022 --sample 10 --make-wordcloud --wordcloud-output out/wordcloud_2022.png --wordcloud-top 200
+```
+python run_all.py # simplest: runs ingest + join + sample (no wordcloud)
+```
+- With wordcloud at the end (optional flags):
+```
+python run_all.py --years 2022 --sample 10 --make-wordcloud --wordcloud-output out/wordcloud_2022.png --wordcloud-top 200
+```
+- Run the end-2-end sentiment analysis
+  - run the labeled python scripts in their numerical order 1 --> 2 --> 3 --> 4 --> 5 --> 6
+```
+python 1-extract_restaurant_data.py
+python 2-aspects_extract_spaCy.py
+python 3-...
+python 4-...
+python 5-...
+python 6-...
+```
 
 ## Environment recap
 
@@ -450,8 +495,20 @@ Edge cases and tips:
 - If Spark cannot infer schema for an empty parquet path, the wordcloud script will either auto-generate reviews parquet (unless --no-generate is set) or fall back to enriched if available.
 - The reader and wordcloud scripts resolve relative paths from either the current folder or the repo root, so you can run them from repo root or enriched/.
 
----
 
-### ???. Figma Doc
-Proposed Game Plan
-https://www.figma.com/board/QpCfwYfbgEIpWHs54CPg0f/Proposed-Game-Plan-Flow-Chart?node-id=0-1&t=HUS5YNJthlFw0eho-1
+### run the end-2-end sentiment analysis
+Due to heavy data processing is involved in each step, we recommand running the following python scripts separately in thier numercial order. 
+- python 1-extract_restaurant_data.py - use data in parquet/yelp_review_enriched
+- python 2-aspects_extract_spaCy.py - use output from 1
+- python 3-aspect_mapping_tfidf.py - use output from 2
+- python 4-aspect_scoring.py - use output from 3
+- python 5-compute_reviewer_weights - use output from 3
+- python 6-aspect_scoring_weighted.py - use output from 4 & 5
+
+
+### run the tf-idf and cosine similarity mapping evaluation against baseline method. 
+- python 1-extract_restaurant_data.py - use data in parquet/yelp_review_enriched
+- python 2-aspects_extract_spaCy.py - use output from 1
+- python 3.1-aspect_mapping_tfidf_evaluate.py - use output from 2
+- See manually label data and evaludation result in 3.1-aspect_mapping_tfidf_evaluate_manually_labeled.csv
+
