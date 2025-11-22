@@ -287,7 +287,7 @@ Parquet outputs (created by the scripts):
 - 3.1-aspect_mapping_tfidf_evaluate.py - generate mapping using both proposed and baseline method. 
 - 3.1-aspect_mapping_tfidf_evaluate_manually_labeled.csv - manually labeled data and evaludation result.
 
-# Other scripts:
+### 4. Other scripts:
 - read_in_data.py - read in parquet files and exam the data
 - test_spark.py - smoke test for pyspark setup.
 - requirement.txt - includes all of the libraries needed to run the python script for:
