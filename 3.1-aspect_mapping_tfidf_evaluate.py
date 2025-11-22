@@ -244,7 +244,7 @@ unique_terms_counts = (
       .orderBy(F.desc("count"))
 )
 unique_terms_counts.show()
-unique_terms_counts.toPandas().to_csv(f"3.1-aspect_mapping_tfid_evaluate_unique_term_count.csv")
+unique_terms_counts.toPandas().to_csv(f"3.1-aspect_mapping_tfidf_evaluate_unique_term_count.csv")
 
 prototype_texts = [MAPPINGS[a] for a in ASPECTS]
 
@@ -346,7 +346,7 @@ print(f"✅ Done in {time.time()-t0:.2f}s")
 
 df_output = df_output.sample(withReplacement=False, fraction=0.01, seed=3)
 print(f"df_output row number: {df_output.count()}")
-df_output.toPandas().to_csv(f"3.1-aspect_mapping_tfid_evaluate.csv")
+df_output.toPandas().to_csv(f"3.1-aspect_mapping_tfidf_evaluate.csv")
 
 spark.stop()
 
